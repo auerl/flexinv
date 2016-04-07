@@ -8,6 +8,12 @@ Please note that this README file is not exhaustive and does not cover all intri
 
 ## Installing Flexinv
 
+### Requirements
+
+The Fortran core of this software is self contained and only requires a recent Fortran compiler. For the python based wrapper scripts, we recommend to use the [Anaconda](https://www.continuum.io/downloads) Python distribution. All required libraries should be contained therein.
+
+### Installation
+
 After obtaining the code with
 
 ```bash
@@ -27,9 +33,7 @@ Setting up a new global tomographic imaging problem, requires reasoning about a 
 
 ### Preliminaries
 
-While the core of flexinv is written in Fortran, we provide a python wrapper for convenience, which can be via handled via command line arguments and/or a simple parameter file `inparam` in the main program folder. First of all, you should replace all references to `/path/to/flexinv` with your actual installation path in in `inparam`.
-
-### Chosing datasets
+While the core of flexinv is written in Fortran, we provide a python wrapper for convenience, which can be via handled via command line arguments and/or a simple parameter file `inparam` in the main program folder. First of all, you should replace all references to `/path/to/flexinv` with your actual installation path in in `inparam`. Also chose folders where to store matrices and inversion results in the `[folders]` category of `inparam`. 
 
 ### Parameter selection
 First we need to chose lateral and vertical parameterization, as well as a set of physical inversion parameters. Flexinv currently supports orthogonal, curvilinear hexahedral basis functions or _voxels_, with adapted azimuthal increments at the poles to approximately maintain a uniform volume over the Earth's sphere. Since, for this test problem we focus on S-waves, we chose to invert for transversely isotropic shear wavespeeds v_{SH} and v_{SV} (Auer et al. 2014), at 28 layers of variable thickness from 0 to 2891 km depth and an equatorial increment of 5.0°.
@@ -41,211 +45,52 @@ The module `mat/suwa` solves forward problem for surface waves, relating frequen
 ./setup.py --suwa_matrix --sw_data_id sw.fm.ac --eqincr 5.0 --inv_pars '3 4' --layers l28
 ```
 
-The argument `--suwa_matrix` tells setup.py to prepare a series of submit scripts for surface wave submatrices, split up by frequency and overtone number. As you see, the desired physical parameters v_{SH} and v_{SV} have been passed through the `--inv_pars '3 4'`. Inverting for v_{PH}, v_{PV}, v_{SH} and v_{SV} would result in `--inv_pars '1 2 3 4'`. The argument after `--layers` specifies the desired vertical parameterization (see `inparam` to clarify which exact parameterization the _l28_ corresponds to), while `--eqincr 5.0` tells setup.py to use a five-degree lateral mesh size.
+The argument `--suwa_matrix` tells setup.py to prepare a series of submit scripts for surface wave submatrices, split up by frequency and overtone number. As you see, the desired physical parameters v_{SH} and v_{SV} have been passed through the `--inv_pars '3 4'`. Inverting for v_{PH}, v_{PV}, v_{SH} and v_{SV} would result in `--inv_pars '1 2 3 4'`. The argument after `--layers` specifies the desired vertical parameterization (see `inparam` to clarify which exact parameterization the _l28_ corresponds to), while `--eqincr 5.0` tells setup.py to use a five-degree lateral mesh size and `--sw_data_id` specifies the ID of the data set to be used (see inparam, to figure out which ID corresponds to which data set).
 
-#### Surface-wave matrices
-...
+The script will create a folder to store matrices, and submit scripts for the LSF job schedulers at HPC facilities. Please adapt the code whenever you wish to submit to different schedulers such as SLURM. Submit all jobs to the scheduler by 
+```bash
+sh /path/to/flexinv/out/matrices/sw.fm.ac-28-p24-5.0/submit.sh
+```
 
-#### Sensitivity kernels
+Make sure that enough disk space is available, since surface wave matrices may occupy up to a couple hundres of GB of disk space.
+
+surface wave kernels ...
 
 ### Body-wave matrices 
-The module `mat/bowa` solves the forward problem for body waves, relating cross-correlation based or picked traveltime delays with wavespeed perturbations, and assembles body-wave submatrices.
+The module `mat/bowa` solves the forward problem for body waves, relating cross-correlation based or picked traveltime delays with wavespeed perturbations, and assembles body-wave submatrices. Command line arguments are the same as for surface waves.
 
 ```bash
 ./setup.py --bowa_matrix --bw_data_id rit --eqincr 5.0 --inv_pars '3 4' --layers l28
 ```
-
-### Multi-scale meshing
-
-![Adaptive mesh](https://cloud.githubusercontent.com/assets/5452469/14347307/b81e88c4-fcb6-11e5-9b63-959849e71e6c.png)
-
+Note that computation of sensitivity kernels as well as assembly of matrices for body waves is much more efficient than for surface waves. Hence, we chose to do it on the fly, directly on the interactive (login) nodes.
 
 ### Inversion
 
-Please note that the legacy Fortran routines sometimes comprise hard-coded 
-We strongly recommend to use PETScivn
+Finally, setup.py provides functionality to combine stored matrices via a specific weighting scheme into a text file, representative of an inversion 'schedule'. These schedule files can be read, e.g. with the module `inv`, which is a simple, single-core implementation of the LSQR algorithm of _Paige & Saunders (1982)_. We strongly recommend to use our new parallel tomography solver [PETScinv](../petscinv), which is based on the excellent [PETSc library](https://github.com/petsc/petsc). Create an inversion schedule by entering a command similar to
 
+```bash
+./setup.py --inversion --inv_id 'inv1' --inv_dirs S /path/to/flexinv/out/matrices/sw.fm.ac-p34-28-5.0 1.0 B /path/to/flexinv/out/matrices/bws-p34-28-5.0 .0 5.0 --layers l28 --eqincr 5.0 --ddmp_id dd28eq --rdmp_id dd28eq --weight_id ws1
+```
 
-===================================================================
-May 7th, 2014, Ludwig:
-===================================================================
-Slight changes to the code by Ludwig in May 2014:
-
-I continued cleaning up the code and made it a bit more flexibel, i.e.
-one can now just freely pick the inversion parameters with a new flag
---inv_pars '1 2 3 4' where 1=vph, 2=vpv, 3=vsh, 4=vsv. You should also
-be able to rotate the parameters, e.g. '3 4 2', to invert for vsh,
-vsv and vp -> vph sensitivity of surface waves seems pretty limited
-so this might be a reasonable choice!
-
-The code now handles up to 4 parameters. Also I generalized the style
-the damping is applied: You have now two 'damping schemes' controlling
-how much roughness and difference damping is applied to each parameter
-and at each depth.
-
-Furthermore I merged this version of the code with the one where I
-added support for the new crustal model CRUST1.0. Just call setup.py
-with --crust10 to compute the new kernels
-
-
-
-
-
-===================================================================
-March 5th, 2014:
-===================================================================
-Hi Andrea,
-
-here is the current version of our software for joint inversion of 
-body wave traveltimes and surface wave. I prepared everything in such 
-a way that it should be more or less straightforward to embark on the
-problem of Joint inversion of P and S.
-
-To get started I would suggest you to start with the following tomography,
-which should be doable on my workstation:
-
-- Inversion for v_sh and v_sv only
-- Fundamental modes and direct S-Phases only
-- 28 layers through the whole mantle
-- 5°x5° lateral block size everywhere
-- Fundamental modes of Ekström 
-- Direct S-phases from Ritsema
-
-If that works, you can proceed with the Joint P-S tomography.
-
-Here is the steps that you need to do:
-
-1.) Compute localized surface wave kernels for the crustal model CRUST2.0
-*** THIS STEP CAN BE SKIPPED SINCE I ALREADY PRECOMPUTED THE KERNELS FOR YOU ***
-
-COMMAND:
-./setup.py --suwa_matrix --sw_data_id etl.ac --eqincr 5.0 --layers l28
-
---suwa_matrix tells setup.py to prepare everything to compute surface wave matrices
---layers specifies the vertical parameterization, l28 is an identifier which is 
-associated with a certain layering. See 'inparam', where the actual layer depths
-for the id 'l28' is defined. You can easily change it.
---eqincr is the equatorial increment in degrees, i.e. lateral block size
---sw_data_id is the id of the surface waves dataset to be used, again see 'inparam'
-to check which surface wave dataset is meant with that. etl stands for the ekström
-dataset .ac means it has been corrected for azimuthal anisotropy beforehand
-
-The software is prepared to automatically check whether kernels for a particular
-choice of vertical paramterization already exist, or not. What you do is basically
-to call setup.py with certain command line arguments, telling it to compute surface
-wave matrices. In case no kernels are found in the folder __kernels__ it will compute
-them (actually it will prepare a bunch of shell scripts, which you can call sub-
-sequently in parallel to compute the kernels). You can easily verify whether the
-kernel database is complete: Just check if there is 16200 unique files called
-L_??????_000_kernels in the folder c2-av-28/c2-28. The av indicates that the kernels
-are parameterized in voigt average and anisotropy kernels. The 28 means 28 layers.
-c2 means they are CRUST2.0 kernels. In the kernels files (ascii) there should be
-28 lines for each mode.
-
-
-2.) Compute the surface wave matrices
-
-When you read 1) you will notice that the call to compute kernels and matrices is
-actually the same
-
-COMMAND:
-./setup.py --suwa_matrix --sw_data_id etl.ac --eqincr 5.0 --layers l28
-
-Navigate to the folder __matrices__/etl.ac-28-5.0 .. the name of the folder should
-be self-explanatory. In the file you find a bunch of bash scripts, and one script
-called submit.sh, which is meant to be run on a cluster with bsub(lsf) queing 
-system. Since you want to run the thing on a normal workstation without that, please
-just remove the 'bsub -R lustre -W35:59 < ' infront of the path and add a & behind
-each .sh to run it in the background. After every 6th line add a new line with wait
-such that it runs only 6 of the scripts at once (i only have 8 processors on my
-machine). Sorry... you can of course change the setup.py to do all of that.
-
-BEFORE:
-bsub -R lustre -W35:59 < /home/andrea/flexinv2/__matrices__/etl.ac-28-5.0/sw.000.sh
-
-AFTER:
-/home/andrea/flexinv2/__matrices__/etl.ac-28-5.0/sw.000.sh &
-/home/andrea/flexinv2/__matrices__/etl.ac-28-5.0/sw.001.sh &
-/home/andrea/flexinv2/__matrices__/etl.ac-28-5.0/sw.002.sh &
-wait
-/home/andrea/flexinv2/__matrices__/etl.ac-28-5.0/sw.003.sh &
-/home/andrea/flexinv2/__matrices__/etl.ac-28-5.0/sw.004.sh &
-...
-
-Then just type ./submit.sh to compute your matrix. This will involve a call to the
-programm matrix_sw_vx which is in flexinv2/mat/suwa/, and needs all the 1D kernel
-profiles. Computing the matrix will take quite a while and the outcome consumes
-quite a bit of disk space.
-
-Look at the sw.???.log files to see what happens. What you will get is sw
-matrices, ready to be read by the LSQR based inversion code, in the Yale
-CSR sparse matrix format (values,indices,pointers plus the rhs).
-
-
-3.) Compute the body wave matrices
-
-Now we compute the body wave matrices. Contrary to the surface wave matrices we
-do not need to precompute the kernels, since crustal corrections for body wave
-traveltime delays are computed in a very different fashion and our sensitivites
-dont depend on the crust, so much.
-
-COMMAND:
-./setup.py --bowa_matrix --bw_data_id rit --eqincr 5.0 --layers l28
-
-Since everything is a bit quicker for body waves i didn't take the effort to
-parallelize this part of the code. The computation of the body wave matrices
-just starts immediately. Do not worry about occasional (or sometimes not so
-occasional) error messages. Mostly this just means that certain paths could
-not be used due to a weird geometry.
-
-What you will get is a folder rit-28-5.0 in __matrices__ containing matrices
-in the same format as the surface wave matrices.
-
-
-4.) Inverting different submatrices together
-
-Finally we want to combine all our precomputed matrices in a certain way (i.e.
-using a specific weighting scheme) and invert them together. Generally you
+Generally you
 need to upweight the body wave portion of the data due to their lower RMS.
 Initially it is okay to use a rather rough weighting, which can be refined 
 later on. 
 
-COMMAND
-./setup.py --inversion --inv_id 'Test1' --inv_dirs S /home/andrea/flexinv2/__matrices__/etl.ac-28-5.0 1.0 B /home/andrea/flexinv2/__matrices__/rit-28-5.0 5.0 --layers l28 --eqincr 5.0 --dmp_id dfilt --weight_id ws1
-
-Okay, what is happening here: --inversion tells setup.py to setup the 
-inversion scripts. --inv_id is how the result folder will be named, --inv_dirs
-is followed by a list of folders which are supposed to be crawled for usable matrices.
-The Structure is always S/B to tell him whether it is body or surface waves, then
-the absolute path to the folder, and then an manual additional weighting. Just use 1.0
-for surface waves and 5.0 for body waves for now.You can make this as long as you want.
---dmp_id is the id of the damping schedule it defines how exactly vertical and horizontal 
-roughness damping is tuned (it can be different in different layers). dfilt is a pretty 
-simple damping schedule.
---weight_id is the weighting schedule, just use ws1. Like the damping schedule it is
-defined in the file inparam.
-
-You can then navigate to __inversions__/Test1.* in which, again, a bunch of scripts
-for different damping parameters should have been created (pc.*.sh). Normally, you
-would call them via the submit-script submit.sh, but you can also do chmod 755 pc*.sh
-and call them individually. Their stdout will be written to a log file. Modify the
-first line in the pc*sh scripts to just see the output on the command line.
-
-5.) Postprocessing and plotting
-
-Convert between vsh/vsv and voigt/xi by typing
-
-postproc.py --convert
-
-And plot your results with the command
-
-comp_rg_vs.sh dvoigt.???.pcn layers.in 5.0
-
-Just create your own copy of /work/ana/netcdfdrawmap/comp_rg_vs.sh and modify what
-is in it, to make different plots.
-
-Good luck!
-
-:-)
+The argument `--inversion` tells setup.py to activate the inversion major mode, the `--inv_id` defines how the output folder will be titled, the list of folders after `--inv_dirs` are automatically crawled for pre-computed submatrices. The _S/B_ defines, whether the folder contains body or surface wave matrices, and the real value following the folder path is an additional weighting factor given to the matrices stored in that folder. The `--ddmp_id`,`--rdmp_id` and `--weight_id` define theID's of the anisotropy and roughness damping schemes, respectively (see inparam for details).
 
 
+### Multi-scale meshing
+
+... To be updated ... 
+
+![Adaptive mesh](https://cloud.githubusercontent.com/assets/5452469/14347307/b81e88c4-fcb6-11e5-9b63-959849e71e6c.png =300x) 
+
+--project
+--proj_dirs
+--adaptive
+--inv_pars '1 2 3 4'
+
+### Plotting and analysis
+
+Plotting and analysis of models can be performed using our [pytomo](../pytomo) library.
