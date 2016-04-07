@@ -8,13 +8,13 @@ Please note that this README file is not exhaustive and does not cover all intri
 
 ## Installing Flexinv
 
-After downloading the code with
+After obtaining the code with
 
 ```bash
 git clone http://github.com/auerl/flexinv.git .
 ```
 
-it can be compiled with any modern compiler. We have thoroughly tested our code with the 2014 and 2015 versions of the Intel compiler collection on Ubuntu 12.04 and 14.04, but any UNIXoid OS should work just as well. Build the code with
+it can be compiled with any modern compiler. We have thoroughly tested our code with the 2014 and 2015 versions of the Intel compiler collection on Ubuntu 12.04 and 14.04, but any UNIXoid OS should be fine. Build the code with
 
 ```bash
 cd flexinv
@@ -23,13 +23,19 @@ cd flexinv
 
 ## Running Flexinv
 
+Setting up a new global tomographic imaging problem, requires reasoning about a myriad of parameters, and only a quick overview, leading approximately to our model _savani_ from _(Auer et al. 2014), shall be given here. Everyone who aims addressing a specific problems is strongly encourage to get in touch with me.
+
 ### Preliminaries
 
-### Chosing a dataset
+While the core of flexinv is written in Fortran, we provide a python wrapper for convenience, which can be via handled via command line arguments and/or a simple parameter file `inparam` in the main program folder. First of all, you should replace all references to `/path/to/flexinv` with your actual installation path in in `inparam`.
+
+### Chosing datasets
 
 ### Parameter selection
 
 ### Surface-wave matrices
+
+#### Sensitivity kernels
 
 ### Body-wave matrices 
 
