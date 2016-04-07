@@ -57,6 +57,9 @@ The module `mat/bowa` solves the forward problem for body waves, relating cross-
 
 ### Multi-scale meshing
 
+![Adaptive mesh](https://cloud.githubusercontent.com/assets/5452469/14347307/b81e88c4-fcb6-11e5-9b63-959849e71e6c.png)
+
+
 ### Inversion
 
 Please note that the legacy Fortran routines sometimes comprise hard-coded 
