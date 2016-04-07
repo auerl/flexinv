@@ -99,6 +99,6 @@ The argument `--inversion` tells setup.py to activate the inversion major mode, 
 --adaptive
 --inv_pars '1 2 3 4'
 
-### Plotting and analysis
+## Plotting and analysis
 
 Plotting and analysis of models can be performed using our [pytomo](../pytomo) library.
