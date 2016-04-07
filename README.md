@@ -37,7 +37,7 @@ cd flexinv
 
 ## Running Flexinv
 
-Setting up a new global tomographic imaging problem, requires reasoning about a myriad of parameters, and only a quick overview, leading approximately to _Model A_ from _(Auer et al. 2014), shall be given here. Everyone who aims addressing a specific problems is strongly encourage to get in touch with me.
+Setting up a new global tomographic imaging problem, requires reasoning about a myriad of parameters, and only a quick overview, leading approximately to _Model A_ from _Auer et al. (2014)_, shall be given here. Everyone who aims addressing a specific problems is strongly encourage to get in touch with me.
 
 ### Preliminaries
 
@@ -47,7 +47,7 @@ While the core of flexinv is written in Fortran, we provide a python wrapper for
 First we need to chose lateral and vertical parameterization, as well as a set of physical inversion parameters. Flexinv currently supports orthogonal, curvilinear hexahedral basis functions or _voxels_, with adapted azimuthal increments at the poles to approximately maintain a uniform volume over the Earth's sphere. Since, for this test problem we focus on S-waves, we chose to invert for transversely isotropic shear wavespeeds v<sub>SH</sub> and v<sub>SV</sub> (Auer et al. 2014), at 28 layers of variable thickness from 0 to 2891 km depth and an equatorial increment of 5.0°.
 
 ### Surface-wave matrices
-The module `mat/suwa` solves forward problem for surface waves, relating frequency dependent phase anomalies with wavespeed perturbations and assembles surface wave submatrices in the CSR (compressed-spares-row) Yale-type binary format. Using the
+The module `mat/suwa` solves forward problem for surface waves, relating frequency dependent phase anomalies with wavespeed perturbations and assembles surface wave submatrices in the [CSR](https://de.wikipedia.org/wiki/Compressed_Row_Storage) (compressed-spares-row) Yale-type binary format. Using the
 
 ```bash
 ./setup.py --suwa_matrix --sw_data_id sw.fm.ac --eqincr 5.0 --inv_pars '3 4' --layers l28
@@ -74,7 +74,7 @@ Note that computation of sensitivity kernels as well as assembly of matrices for
 
 ### Inversion
 
-Finally, setup.py provides functionality to combine stored matrices via a specific weighting scheme into a text file, representative of an inversion 'schedule'. These schedule files can be read, e.g. with the module `inv`, which is a simple, single-core implementation of the LSQR algorithm of _Paige & Saunders (1982)_. We strongly recommend to use our new parallel tomography solver [PETScinv](../petscinv), which is based on the excellent [PETSc library](https://github.com/petsc/petsc). Create an inversion schedule by entering a command similar to
+Finally, setup.py provides functionality to combine stored matrices via a specific weighting scheme into a text file, representative of an inversion 'schedule'. These schedule files can be read, e.g. with the module `inv`, which is a simple, single-core implementation of the [LSQR](https://en.wikipedia.org/wiki/Conjugate_gradient_method) algorithm of _Paige & Saunders (1982)_. We strongly recommend to use our new parallel tomography solver [PETScinv](../petscinv), which is based on the excellent [PETSc library](https://github.com/petsc/petsc). Create an inversion schedule by entering a command similar to
 
 ```bash
 ./setup.py --inversion --inv_id 'inv1' --inv_dirs S /path/to/flexinv/out/matrices/sw.fm.ac-p34-28-5.0 1.0 B /path/to/flexinv/out/matrices/bws-p34-28-5.0 .0 5.0 --layers l28 --eqincr 5.0 --ddmp_id dd28eq --rdmp_id dd28eq --weight_id ws1
