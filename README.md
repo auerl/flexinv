@@ -1,8 +1,8 @@
 #Flexinv
 
-Flexinv is a Fortran/Python toolbox to create global, adaptive resolution transversely isotropic tomographic models of the entire mantle, via joint inversion of surface-wave dispersion and body-wave traveltimes, in the high-frequency ray approximation. 
+Flexinv is a Fortran/Python toolbox to create global, adaptive resolution transversely isotropic tomographic models of the entire mantle, via joint inversion of surface-wave dispersion and body-wave traveltimes, in the high-frequency ray approximation. See _Auer et al. (2014)_ for a complete description.
 
-Some components of the surface wave parts of this code go back to Woodhouse (1981) and Dziewonski & Anderson (1981). The body-wave routines go back to Gu (2005). Crustal corrections are based on CRUST2.0 by Laske et al. (2002). Models are parameterized in curvilinear hexahedrons, whose size is adapted to local ray coverage, following Schäfer et al. (2011).
+Some components of the surface wave parts of this code go back to Woodhouse _(1981)_ and _Dziewonski & Anderson (1981)_. The body-wave routines go back to _Gu (2005)_. Crustal corrections are based on CRUST2.0 by _Laske et al. (2002)_. Models are parameterized in curvilinear hexahedrons, whose size is adapted to local ray coverage, following _Schäfer et al. (2011)_.
 
 Please note that this README file is not exhaustive and does not cover all intriciacies of hidden in the code, but should, at least, provide you a means to get started
 
