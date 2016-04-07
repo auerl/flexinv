@@ -1,11 +1,43 @@
-TODO:
-- CRUST1.0: More testing required, especially matrix_sw_vx.f
-- Adaptive grid: Smallest grid size should be 0.625°
-- Add plotting script netcdfdrawmapultra.py to git
-- Add postproc.py to the git repository
-- Merge this version of the code with my experiments on
-  prescribed anisotropy, which i did using another fork
+#Flexinv
 
+Flexinv is a Fortran/Python toolbox to create global, adaptive resolution transversely isotropic tomographic models of the entire mantle, via joint inversion of surface-wave dispersion and body-wave traveltimes, in the high-frequency ray approximation. 
+
+Some components of the surface wave parts of this code go back to Woodhouse (1981) and Dziewonski & Anderson (1981). The body-wave routines go back to Gu (2005). Crustal corrections are based on CRUST2.0 by Laske et al. (2002). Models are parameterized in curvilinear hexahedrons, whose size is adapted to local ray coverage, following Schäfer et al. (2011).
+
+Please note that this README file is not exhaustive and does not cover all intriciacies of hidden in the code, but should, at least, provide you a means to get started
+
+## Installing Flexinv
+
+After downloading the code with
+
+```bash
+git clone http://github.com/auerl/flexinv.git .
+```
+
+it can be compiled with any modern compiler. We have thoroughly tested our code with the 2014 and 2015 versions of the Intel compiler collection on Ubuntu 12.04 and 14.04, but any UNIXoid OS should work just as well. Build the code with
+
+```bash
+cd flexinv
+./build.sh
+```
+
+## Running Flexinv
+
+### Preliminaries
+
+### Chosing a dataset
+
+### Parameter selection
+
+### Surface-wave matrices
+
+### Body-wave matrices 
+
+### Multi-scale meshing
+
+### Inversion
+
+Please note that the legacy Fortran routines sometimes comprise hard-coded 
 
 
 
