@@ -1,0 +1,19 @@
+
+C      SUBROUTINE RFOUR
+C$PROG RFOUR
+      SUBROUTINE RFOUR(DATA,M,NN)
+      DIMENSION DATA(1),NTOT(3)
+      NTOT(1)=2*2**M
+      XN=NTOT(1)/2
+      NTP2=NTOT(1)+2
+      IF(NN.LT.0) GO TO 1
+      NT=NTOT(1)
+      DO 2 N=1,NT
+    2 DATA(N)=DATA(N)/XN
+      CALL FOUR2(DATA,NTOT,1,-1,0)
+      RETURN
+    1 DO 4 N=1,NTP2
+    4 DATA(N)=DATA(N)/2.
+      CALL FOUR2(DATA,NTOT,1,1,-1)
+      RETURN
+      END

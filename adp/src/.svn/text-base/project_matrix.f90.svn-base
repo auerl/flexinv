@@ -1,0 +1,363 @@
+SUBROUTINE PROJECT_MATRIX
+
+ !*********************************************************************!
+ !
+ !    J. Schaefer 09/2009
+ !    
+ !
+ !*********************************************************************!
+
+  USE inv_adpx_module
+  IMPLICIT NONE
+  INTEGER                           :: icol           ! index for loop over rows
+  REAL,DIMENSION(:),ALLOCATABLE     :: values,valuesa ! values in 1 row of original and adaptive matrix
+  INTEGER*4,DIMENSION(:),ALLOCATABLE:: indx, indxa    ! index of values in 1 row of matrix
+  REAL,DIMENSION(m)                 :: t              ! rhs
+  INTEGER                           :: mpoin_row,mpoin_now,mpoin_old ! mpoin_now: read in, #px/row, mpoin_tot: total number of values up to now, mpoin_old: total number of values up to last step
+  INTEGER                           :: i2,k,nrec,n
+!  REAL,DIMENSION(:),ALLOCATABLE     :: rowa  ! 1 row of adaptive matrix
+  INTEGER                           :: rec_written    ! number of entries for adaptive matrix that have already been written 
+  INTEGER                           :: rec_new        ! number of entries for adaptive matrix added in this step
+  INTEGER                           :: natamax 
+!  CHARACTER(LEN=6)                  :: icolchar
+  real                              :: t1,t2,t3,t4,t5,t6
+  CHARACTER(LEN=6)                  :: r1_char, r2_char
+
+  
+    call CPU_TIME(t1)
+
+    write(r1_char,'(I6.6)') r1
+    write(r2_char,'(I6.6)') r2
+
+ !====================================================================!
+ ! allocate space
+ !====================================================================!
+
+  natamax=npar_adpx*(npar_adpx+1)
+  natamax= natamax/2
+  print*,"npar_adpx=",npar_adpx," natamax=", natamax
+
+  allocate(indx(n1layer(nlev)), values(n1layer(nlev)))
+  allocate(indxa(npar_adpx)    , valuesa(npar_adpx)     )
+  allocate(ata(natamax) ,atd(npar_adpx) )
+  mpoin_old=0
+  mpoin_row=0
+  rec_written=0
+
+
+ !====================================================================!
+ ! open files for matrix with adaptive grid
+ !====================================================================!
+
+!  open(1,file=trim(namexxxad)//".ad."//r1_char//"."//r2_char,access='direct',recl=4,form='unformatted')
+!  open(2,file=trim(nameindad)//".ad"//r1_char//"."//r2_char,access='direct',recl=4,form='unformatted')
+!  open(3,file=trim(namerhs)//".ad"//r1_char//"."//r2_char)
+!  open(4,file=trim(namepoi)//".ad"//r1_char//"."//r2_char)
+  open(1,file=trim(namexxxad),access='direct',recl=4,form='unformatted')
+  open(2,file=trim(nameindad),access='direct',recl=4,form='unformatted')
+  open(3,file=trim(namerhsad))
+  open(4,file=trim(namepoiad))
+
+ !====================================================================!
+ ! read data vector
+ !====================================================================!
+
+  open(24,file=namerhs,status='old')
+  do i=1,m
+        read(24,*,err=154)t(i)          
+  end do
+  close(24)
+
+
+ !====================================================================!
+ !projecting row by row
+ !====================================================================!
+
+  OPEN(23,FILE=trim(namepoi),status='old')
+  write(82,*) "projecting the matrix..."
+  print*,"projecting the matrix..."
+  k=0
+
+  
+  call CPU_TIME(t2)
+
+  print*, "time for blabla", t2-t1
+  print*, "projecting rows 1 to ", m
+
+  do icol=1,m !*******************************************************************************************
+     
+  ! pointer
+      read(23,*,err=153)mpoin_now                      ! #values/row, as many as pixel crossed
+      mpoin_row=mpoin_now - mpoin_old                  ! actual value
+
+ !====================================================================!
+ ! read row
+ !====================================================================!
+
+  if (icol>=r1.and.icol<=r2) then !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+ !test
+      if (icol<4) print*,icol,"pointer:",  mpoin_now, mpoin_old, mpoin_row
+      if (mod(icol,1000)==0) print*,icol,"pointer:",  mpoin_now, mpoin_old, mpoin_row
+
+     OPEN(21,FILE=trim(namexxx),status='old',access='direct',recl=4,form='unformatted')
+     OPEN(22,FILE=trim(nameind),status='old',access='direct',recl=4,form='unformatted')
+
+
+ ! values, index
+      jj=0
+      do nrec=mpoin_old+1, mpoin_now
+          jj=jj+1
+
+          read(21,rec=nrec,err=156)values(jj)                  ! values: raypath through this pixel
+          values(jj)=values(jj)*relwei
+          read(22,rec=nrec,err=155)indx(jj)                    ! index in row = index of corresponding pixel
+      enddo
+
+!       write(icolchar,'(I6.6)') j
+!       OPEN(21,FILE=trim(namexxx)//icolchar,status='old',access='direct',recl=4*mpoin_row,form='unformatted')
+!       OPEN(22,FILE=trim(nameind)//icolchar,status='old',access='direct',recl=4*mpoin_row,form='unformatted')
+! 
+!       read(21,rec=1) (values(jj),jj=1,mpoin_row)
+!       read(22,rec=1,err=155) (indx(jj),jj=1,mpoin_row)    
+!       do jj=1, mpoin_row
+!            values(jj)=values(jj)*relwei
+!       end do
+
+  ! test
+      if (jj>n1layer(nlev)) then
+            print*, "error while reading the matrix"
+            stop
+      end if
+
+
+ 
+      close(21)
+      close(22)
+
+
+  if (icol==1)  then
+  call CPU_TIME(t3)
+  print*, "time for reading", t3-t2
+    write(82,*)  "time for reading", t3-t2
+  
+  end if
+
+ !====================================================================!
+ !  project row onto adaptive grid
+ !====================================================================!
+
+      if (rec_written/=k) then
+           print*, "problem"
+            stop
+      end if
+
+
+      rec_new=0
+      do i=1,jj
+         if(values(i).ne.0.)then                            ! secure check, after working with the value they are set to 0
+            k=k+1                                           ! record number to write the adapted value   
+            rec_new=rec_new+1                               ! counts matrix entries added in this step
+            valuesa(rec_new)=values(i)                      ! value of new a is same as for old a
+            indxa(rec_new)=inew(indx(i))
+            values(i)=0.
+            do i2=1,jj                                      ! check if there are more matrix-entries for the same pixel and add them
+               if(inew(indx(i)).eq.inew(indx(i2)))then
+                  valuesa(rec_new)=valuesa(rec_new)+values(i2)
+                  values(i2)=0.                             ! to be sure this value is not used again
+               endif
+            enddo
+         endif
+      end do
+
+      if (rec_new/=k-rec_written) then
+            print*, "programming error!!!!!!!!!!"
+            stop
+      end if
+
+  if (icol==1)  then
+    call CPU_TIME(t4)
+    print*, "time for projecting", t4-t3
+    write(82,*)  "time for projecting", t4-t3
+  end if
+
+
+ !====================================================================!
+ !  contribution to ata
+ !====================================================================!
+! nz0=rec_new
+! rowa=valuesa
+! itoata=indxa
+! nfreemax= ->dim atd
+! natamax= ->dim ata
+!      call contribution_ata(rowa,itoata,ata,t(icol),atd,nfreemax,natamax,nz0)
+! 
+! 
+
+
+!   if (icol<4)  then
+!     write(82,*) "valuesa"
+!     write(82,*) valuesa(1:700)
+!     write(82,*) "indexa"
+!     write(82,*) indxa(1:700)
+!   
+!   
+!     do n=1,700
+!       write(99,*) n, indxa(n)
+!       write(77,*) indxa(n), valuesa(n) 
+!     end do  
+!     write(82,*) "npar_adpx=", npar_adpx
+!     write(82,*) "natamax=", natamax
+!     write(82,*) "rec_new=", rec_new
+!     write(82,*) "t(icol)=", t(icol)
+!   end if  
+    
+     call contribution_ata(valuesa,indxa,ata,t(icol),atd,npar_adpx,natamax,rec_new)
+
+!   if (icol<4)  then
+!      write(82,*) "ata"
+!     do n=1,natamax
+!        if (ata(n)/=0)   write(82,*) n, ata(n)
+!     end do
+!       write(82,*) "atd"
+!     do n=1,npar_adpx
+!        if (atd(n)/=0)   write(82,*) n, atd(n)
+!     end do
+!   end if
+
+  
+  
+  
+  
+  
+  if (icol<4)  then
+    call CPU_TIME(t5)
+    print*, "time for contribution_ata", t5-t4
+    write(82,*)"time for contribution_ata", t5-t4
+  end if
+ !====================================================================!
+ !  write row of new matrix
+ !====================================================================!
+
+      do i=1,rec_new
+         write(2,rec=rec_written+i)indxa(i)           ! index
+         write(1,rec=rec_written+i)valuesa(i)         ! values
+      enddo
+      rec_written=rec_new+rec_written 
+      write(4,*)  rec_written                         ! pointer: records/row, added
+     if (icol<10) print*,   icol," rows projected"  
+     if(mod(icol,1000).eq.0)print*,icol," rows projected"
+     if(mod(icol,1000).eq.0) write(82,*) icol," rows projected"    
+
+  endif  !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+      mpoin_old = mpoin_now
+  enddo  !*************************************************************************
+  
+  close(23)
+
+
+
+ !====================================================================!
+ !  write rhs
+  
+  do i=1,m
+     write(3,*)t(i) ! should coincide with original file but better check
+  end do 
+
+  close(1)
+  close(2)
+  close(3)
+  close(4)
+
+
+ !====================================================================!
+ !  write atd and ata
+
+!   open(31,file=trim(namexxx)//'.ad.ata',access='direct',recl=4,form='unformatted')
+!   open(32,file=trim(namexxx)//'.ad.atd',access='direct',recl=4,form='unformatted')
+! 
+! 
+!   print*, "start writing ATd"
+!   do i=1,npar_adpx
+!      write(32,rec=i)atd(i) 
+!      if(mod(icol,1000).eq.0)print*,i," values for atd written"
+!   end do 
+!   print*, "atd written"
+! 
+! 
+!   do i=1,npar_adpx*(npar_adpx+1)/2
+!      write(31,rec=i)ata(i) 
+!      if(mod(icol,1000).eq.0)print*,i," values for ata written"
+!   end do 
+!   print*, "ata written"
+
+  
+  
+  open(31,file=trim(nameata),access='direct',recl=4*natamax,form='unformatted')
+  open(32,file=trim(nameatd),access='direct',recl=4*npar_adpx,form='unformatted')
+
+  call CPU_TIME(t2)
+  write(31,rec=1) (ata(i),i=1,natamax) 
+  call CPU_TIME(t3)  
+  print*, "ata written in ", t3-t2, "s"
+  write(82,*)  "ata written in ", t3-t2, "s"
+  
+  write(32,rec=1) (atd(i),i=1,npar_adpx) 
+   call CPU_TIME(t4)  
+  print*, "atd written in"  , t4-t3, "s"
+  write(82,*) "atd written in"  , t4-t3, "s"
+  
+  
+  deallocate(indx, indxa, values, valuesa, ata, atd)
+  close(31)
+  close(32)
+  info=0
+
+  RETURN
+ !====================================================================!
+ ! error messages 
+
+153   print*,"error while reading pointer", icol
+      stop
+154   print*,"error while reading data vector"
+      stop
+155   print*,"error while reading index",  icol, jj, nrec
+      stop
+156   print*,"error while reading value", icol, jj, nrec
+      stop
+
+
+
+    
+END SUBROUTINE PROJECT_MATRIX        
+
+
+!**********************************************************************!
+!     SUBROUTINES
+!**********************************************************************!
+
+       subroutine contribution_ata(row,index,ata,d,b,n,nata,nz)
+!----given a row of a and corresponding datum augments ata accordingly
+!j it's unimportant for ata which row, just index of value in row important
+ 
+         real ata(nata),b(n),row(n),d
+!	parameter(ndim=100000)
+        integer*4 index(n)
+
+        do i=1,nz
+	   do j=i,nz
+  !    print*,"calculate contribution to ata",i,j
+	      if(index(j).ge.index(i))then
+		 ind=(((index(j)-1)*index(j))/2)+index(i)
+	      else
+		 ind=(((index(i)-1)*index(i))/2)+index(j)
+	      endif
+ ! print*, ind, nata, index(i), index(j)
+	      ata(ind)=ata(ind)+row(i)*row(j)
+	   enddo
+!---------------------add to rhs vector the contribution of j-th row:
+	   b(index(i))=b(index(i))+(row(i)*d)
+        enddo
+        return
+        end

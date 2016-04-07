@@ -1,0 +1,322 @@
+PROGRAM inv_adpx_main
+
+  USE inv_adpx_module
+  IMPLICIT NONE
+  real               :: t1,t2,t3,t4,t5,t6
+  CHARACTER(LEN=120) :: check 
+  integer            :: iplot
+  CHARACTER(LEN=3)   :: project, inversion	
+  call CPU_TIME(t1)
+
+
+  !====================================================================!
+  ! file to check progress, information about projecting the matrix
+
+  print*,"file for progress protocol?"
+  read*,check
+  
+  print*,"projection of matrix on adaptive grid necessary?"
+  read*,project
+
+  print*,"inversion of matrix?"
+  read*,inversion
+
+  print*,"work on ata in packed storage format?"
+  read*, packed
+
+  !====================================================================!
+  ! take care about dimensions of arrays
+
+  print*,"dimension of right-hand-side vector?"
+  read*,m
+  print*,"dimension of sparse matrix arrays?"
+  read*,nonz
+!  allocate(indx(nonz),t(m),mpoin(0:m), values(nonz))
+!  allocate(x(nonz),tt(m)
+
+
+  !====================================================================!
+  ! information for grid definition 
+
+  print*,"what size for fine pixel?"
+  read*,eq_incr
+  print*,"what reference pixel size?"
+  read*,refgrid
+  print*,"compatible with crustal model of same gridsize (0=no,1=yes)?"
+  read*,iswit
+  print*,"assume largest pixel outside Europe? (0=no,1=yes)?"
+  read*,outsideEU
+
+  fact=refgrid/eq_incr				! relation between reference and finest grid
+  nlev= log(refgrid/eq_incr)/log(2.)+1	! number of different pixel sizes
+  nlatzomax=180/eq_incr            ! maximal number of latitudinal zones in finest grid 
+  allocate(ithres(nlev), nsqrs(nlatzomax,nlev), nsqtot(nlatzomax+1,nlev), n1layer(nlev))
+  
+  print*, "so number of different pixel sizes in the adaptive grid is ", nlev
+  print*,"threshold values for hitcount?"
+  read(*,*)(ithres(lev),lev=1,nlev-1)
+  print*,"minimum value of hits per cell?"
+  read(*,*)ithres(nlev)
+  print*, ithres(1:nlev-1)
+
+  !====================================================================!
+  ! information for damping
+
+  print*,"what horizontal roughness damping?"
+  read*,wgrad(1)
+  print*,"vertical roughness damping ? (1=on, else=off)"
+  read*,wgradv(1)
+  print*, "damping:", wgrad(1), wgradv(1)
+  print*,"what norm damping?"
+  read*,damp
+  print*,"what additional norm damping for mid-mantle layers?"
+  read*,dampmm
+  print*,wgrad(1), wgradv(1), damp, dampmm
+   print*,"what anisotropy damping?"
+  read*,anidamp 
+  print*,"number of layers?"
+  read*,nlayi
+  print*,nlayi
+
+
+  !====================================================================!
+  ! information for reading the matrix
+
+  print*,"a matrix?"
+  read*,namexxx
+  read*,namexxxad
+  print*, namexxx, namexxxad
+  print*,"index array?"
+  read*,nameind
+  read*,nameindad  
+  print*, nameind, nameindad  
+  print*,"pointer array?"
+  read*,namepoi
+  read*,namepoiad
+  print*, namepoi, namepoiad
+  print*,"data vector?"
+  read*,namerhs
+  read*,namerhsad
+  print*,"hitcount file?"
+  read*,namehits
+  print*,"file to write grid info"
+  read*,namegrid
+  read*,nameadpx
+  read*,namehtcadgrid
+  read*,namenumberadpx
+  read*,nameata
+  read*,nameatd  
+  print*, "atafile:", nameata
+  print*, "atdfile:", nameatd
+  print*,"file with horizontal roughness damping information?"
+  read*, namerdamp
+  print*,"weight?"
+  read*,relwei
+  print*,"number of observations in this subset?"
+  read*,ndata
+  print*,"index of first and last row of the part of the matrix to project?"
+  read*,r1
+  read*,r2
+
+!======================================================================!
+! infotrmations for plotting
+
+  print*,'model file?'
+  read*,name
+!   print*,'palette file?'
+!   read*,colorname
+!   print*,'remove average from each layer?'
+!   read*,average
+!   print*,"top and bottom layers?"
+!   read*,rtop,rbot
+!   print*, rbot, rtop
+!   print*,'mode (1=GMT layers, 2=values layer, 3=values xyz 4=center of cells)'
+!   read*,imode
+!   print*,'only plot preparation right now? (1=yes)' 
+!   read*,iplot
+  
+  open(82,file=trim(check))
+  write(82,*) "damping:", wgrad(1), wgradv(1)
+
+!======================================================================!
+! check if total number of layers is higher than maximal possible number of layers
+
+  nlay=nlayi+nlayouc
+  if(nlay.gt.nlaym)then
+     print*,'number of layers out of bounds ',nlaym
+     stop
+  endif 
+  print*, "Total number of layers: ",nlay 
+
+
+!======================================================================!
+! compute the mid mantle layers in case of damping
+
+  nlayum =int(xumd_frac*nlay+.5)    ! number of upper mantle layers, xumd_frac is defined in the module
+  nlaylmm=int(xlmd_frac*nlay+.5)    ! number of lower mantle layers
+  nlaymm=nlay-nlaylmm-nlayum        ! number of midmantle layers
+  if(dampmm.gt.0)then
+      print *,'extra damping of ',dampmm
+      print *,'for top ',nlayum,' and bottom ',nlaylmm,' layers'
+  endif
+
+
+!======================================================================!
+! set weights of roughness damping
+!     wgrad(1)=100.
+      wgrad(2)=wgrad(1)
+
+  call CPU_TIME(t2)
+  print*, "time to read informations: ",t2-t1
+  write(82,*)'info read',t2-t1
+
+
+ !======================================================================!
+ ! define parameterization
+
+  write(82,*)'=========================================================='
+  write(82,*)'start param_adpx'
+  nlatzones=180/eq_incr             ! number of latitudinal zones
+  info=1
+!  call param_fine_in_rough(info)    ! subroutine defines parameterization
+  call param_adpx			! subroutine defines parameterization
+
+  IF (info .NE. 0) THEN             ! check for correct working
+     WRITE(*,*)'ERROR in inversion: param_adpx failed.'
+     write(82,*)'ERROR in inversion: param_adpx failed.'
+     GOTO 9999
+ else
+   print*, "Parameterization defined"
+  call CPU_TIME(t3)
+  print*, "time to define parameterization: ",t3-t2
+  write(82,*)'param_adpx done',t3-t2
+  ENDIF
+  call CPU_TIME(t3)
+
+  if (iplot==1) go to 111
+
+
+  !======================================================================!
+  ! project matrix
+  !
+  ! -> combine pixel in matrix 
+  ! (has to work with A)
+ 
+ 
+  if (project.eq.'y'.or.project.eq.'Y') then
+
+    write(82,*)'=========================================================='
+    write(82,*)'start project_matrix'
+    info=1
+    call project_matrix             ! subroutine defines parameterization with adaptive pixel
+    IF (info .NE. 0) THEN             ! check for correct working
+	WRITE(*,*)'ERROR in inversion: project_matrix failed.'
+	GOTO 9999
+    else
+	print*, "Matrix projected"
+    ENDIF
+  
+    call CPU_TIME(t4)
+    print*, "time to project matrix: ",t4-t3
+  
+    write(82,*)'project_matrix done'
+  
+  elseif (project.eq.'n'.or.project.eq.'N') then
+  
+    write(82,*)'=========================================================='
+    write(82,*)'matrix has already been projected and stored'
+    write(82,*)'use stored files instead of new projection'
+  
+  else
+
+    WRITE(*,*)'ERROR Need to get information about whether to project the matrix or not!'  
+    GOTO 9999
+    
+  end if
+  
+
+!======================================================================!
+! define horizontal roughness damping -> BRUTUS
+! btb is calculated with f95-programs but the output is formatted to avoid compatibility problems
+
+
+
+  if (inversion.eq.'y'.or.inversion.eq.'Y') then
+!======================================================================!
+! add matrices
+! necessary for cholesky-factorization: p=(ATA+m2*BTB+n2*CTC)2 * (ATd+0+0)
+
+ write(82,*)'=========================================================='
+ write(82,*)'start add_matrices'
+ info=1
+ call add_matrices             ! subroutine defines parameterization with adaptive pixel
+ IF (info .NE. 0) THEN             ! check for correct working
+   WRITE(*,*)'ERROR in inversion: add_matrices failed.'
+   GOTO 9999
+ else
+    call CPU_TIME(t5)
+    print*, "time to add matrices: ",t5-t4
+    write(82,*)'add_matrices done', t5-t4
+ ENDIF
+ call CPU_TIME(t5)
+
+!======================================================================!
+! cholesky factorisation
+
+ write(82,*) "=========================================================="
+ write(82,*)'start cholchol'
+ info=1
+!  call cholesky             ! subroutine defines parameterization with adaptive pixel
+ call cholchol             ! subroutine defines parameterization with adaptive pixel
+ IF (info .NE. 0) THEN             ! check for correct working
+   WRITE(*,*)'ERROR in inversion: cholesky failed.'
+   GOTO 9999
+ else
+   print*, "inversion done"
+   call CPU_TIME(t6)
+   write(82,*)'cholchol done', t6-t5
+ ENDIF
+
+ elseif (inversion.eq.'n'.or.inversion.eq.'N') then
+  
+    write(82,*)'=========================================================='
+    write(82,*)'matrix has not been inverted'
+    write(82,*)'=========================================================='
+  
+  else
+
+    WRITE(*,*)'ERROR Need to get information about whether to invert the matrix or not!'  
+    GOTO 9999
+    
+  end if
+  
+
+
+111 continue
+
+! !======================================================================!
+! ! prepare plotting
+! 
+!   write(82,*)'=========================================================='
+!   write(82,*)'start mapview'
+!   info=1
+!   call mapview_3d_adpx              ! subroutine defines parameterization with adaptive pixel
+!   IF (info .NE. 0) THEN             ! check for correct working
+!     WRITE(*,*)'ERROR in inversion: mapview failed.'
+!     GOTO 9999
+!   else
+!     write(82,*)'mapview done'
+!   ENDIF
+
+  go to 11 
+9999 CONTINUE ! jump here upon error
+  IF (info .NE. 0) WRITE(*,*)'Controlled termination on error.'
+
+11 continue
+!**********************************************************************!
+!     SUBROUTINES
+!**********************************************************************!
+! contains
+
+
+END PROGRAM inv_adpx_main

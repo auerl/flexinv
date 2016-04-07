@@ -1,0 +1,440 @@
+      subroutine voxel_int(eqlat,eqlon,edep,stlat,stlon,bslat,bslon,ngpt,
+     +	h,rknt,nknt,numsplit,isplayer,xtu,iray,nsqrs,nsqtot,rbnd,nlatzones,nlay,
+     +	nlatzomax,nlaym,eq_incr,n1layer)
+c
+c  Computes the contribution of a spline function over
+c  a ray path.
+c  Input:
+c	 eqlat ---  Earthquake source lat
+c	 eqlon ---  Earthquake source lon
+c	 edep  ---  Earthquake depth
+c	 stlat ---  Earthquake receiver lat
+c	 stlon ---  Earthquake receiver lon
+c	 bslat ---  lat array of horizontal splines
+c	 bslon ---  lon array of horizontal splines
+c	 ngpt  ---  number of horizontal grid points
+c	 h     ---  bucket size (arc length of nonzero B-spline contribution)
+c	 rknt  ---  radial splines
+c	 nknt  ---  number of radial splines
+c	 numsplit  ---  number of split in the radial knots of desired 3-D model
+c	 isplayer   ---  buffer containing top and bottom index of split mantle
+c	 theta_path   ---  array of running angles along ray path
+c	 rad_path   ---  array of radius along raypath
+c	 nthetaeta     ---  total number of path segment
+c	 xtu     ---  turning radius of the ray
+c	 
+c  Output:
+c 	 arow --- a row of A matrix 
+c 	 indarow --- index of non-zero elements of A 
+c
+      implicit double precision (a-h,o-z)
+      include "invparm.h"
+c... A-matrix 
+      common/partvel/pathder(5,3200),pathvel(5,3200)
+      common/amatrix/arow(maxparm),indarow(maxparm),nonzero_a
+      common/invopt/numinvvar,invparlist(5)
+      common/radcontrib/qseg(5,3200),arowk(5,maxrknot)
+      common/anisopath/theta_path(3200),rad_path(3200),ntheta
+      dimension qrad(3,3200),fwork(3,3200)
+      dimension qth(3,3200),qrad_l(3,3200),qth_l(3,3200),xleng(3200)
+      dimension bslat(1),bslon(1)
+      dimension isplayer(maxrknot,1)
+      dimension rknt(maxrknot)
+      dimension transmat(9)
+c--- save the segment of path that a spline contributes to----
+c---
+c      dimension rseg(3200),qseg(5,3200),thseg(3200), 
+      dimension  xlseg(3200)
+c-------------------------------------------------------------
+	parameter(ndim=3200,rearth=6371.d0)
+	parameter(nptint=10) !points inside voxel to evaluate path integral
+	parameter(nint=3) !how many interpolations of ray path
+	dimension xray(ndim),yray(ndim),theta_path_deg(ndim)
+	dimension xi(ndim*2),yi(ndim*2),delint(ndim*2),zi(ndim*2)
+        dimension nsqrs(nlatzomax),nsqtot(nlatzomax+1),rbnd(0:nlaym)
+	parameter(toler=0.00005)! numerical error in pixel coordinates
+	dimension raydtmp(ndim),ztmp(ndim)
+cTEST
+	integer isave(ndim)
+c-------------------------------------------------------------
+
+      hpi=pi*0.5d0
+      twoh=2.d0*h
+      twohsq=twoh*twoh
+      call conv2geocen(eqlat, eqlon, eqtheta, eqphi)
+      call conv2geocen(stlat, stlon, sttheta, stphi)
+      del = dist(eqtheta, eqphi, sttheta, stphi) ! distance between source + receiver
+      call calc_fwdtransmat(eqtheta, eqphi, sttheta, stphi, transmat) ! do i still need this?
+
+
+c-------------------------------------------------------------find which pixels are crossed
+	do i=1,ntheta
+		theta_path_deg(i)=theta_path(i)*180.d0/pi
+	enddo
+
+c--path routine occasionally repeats points
+	k=1
+	raydtmp(1)=theta_path_deg(1)
+	ztmp(1)=rad_path(1)
+	do i=2,ntheta
+	   if(abs(theta_path_deg(i)-theta_path_deg(i-1)).gt.toler)then
+	      k=k+1
+	      raydtmp(k)=theta_path_deg(i)
+	      ztmp(k)=rad_path(i)
+	   endif
+	enddo
+	ntheta=k
+	do i=1,ntheta
+	   theta_path_deg(i)=raydtmp(i)
+	   rad_path(i)=ztmp(i)
+	enddo
+
+	call gceq(eqlon,eqlat,stlon,stlat,theta_path_deg,ntheta,xray,yray,ndim) !find points on great circle
+cTEST
+c	eqlout=eqlon
+c	if(eqlout.lt.0.)eqlout=eqlout+360.
+c	stlout=stlon
+c	if(stlout.lt.0.)stlout=stlout+360.
+c	write(77,*)eqlout,eqlat
+c	do i=1,ntheta
+c		write(77,"(4(f14.7,2x))")xray(i),yray(i),theta_path_deg(i),rad_path(i)
+c	enddo
+c	write(77,*)stlout,stlat
+c	stop
+
+c---there will be a slight inaccuracy as source and station not included in *_path arrays
+
+c----------------------------------then interpolate to make sure ray path is sufficiently densely sampled
+	do k=1,nint
+	   call linint(yray,yi,theta_path_deg,delint,ndim,ntheta)
+	   call linint_x(xray,xi,theta_path_deg,delint,ndim,ntheta)
+	   call linint(rad_path,zi,theta_path_deg,delint,ndim,ntheta)
+	   do i=1,ntheta*2-1
+	      if(xi(i).lt.0.)xi(i)=360.+xi(i)
+	      if(xi(i).gt.360.)xi(i)=xi(i)-360.
+	      xray(i)=xi(i)
+	      yray(i)=yi(i)
+	      rad_path(i)=zi(i)
+	      theta_path_deg(i)=delint(i)
+	   enddo
+	   ntheta=2*ntheta-1
+	enddo
+	
+cTEST
+	do i=1,ntheta
+	   write(67,"(4(f14.7,2x))")xray(i),yray(i),theta_path_deg(i),rad_path(i)
+	enddo
+c	stop
+c	write(*,*)(nsqrs(i),i=1,nlatzones)
+c	write(*,*)(nsqtot(i),i=1,nlatzones+1)
+	do ih=1,nsqtot(nlatzones+1)
+	   isave(ih)=0
+	enddo
+
+c... compute length of ray dl=sqrt(dr+dth*r), put in array xleng
+      xl=0.d0
+      xleng(1)=0.d0
+      do i=1,ntheta-1
+	 dr0=rad_path(i+1)-rad_path(i)
+	 dtheta=(theta_path_deg(i+1)-theta_path_deg(i))*pi/180.d0
+	 dx0=dtheta*(rad_path(i+1)+rad_path(i))*0.5d0
+	 dl=sqrt(dx0*dx0+dr0*dr0)
+	 xl=xl+dl
+	 xleng(i+1)=xl
+      enddo
+      xleng(ntheta+1)=xleng(ntheta)
+c... cubic spline interpolation of radius and theta with respect to xleng 
+      call drspln(1, ntheta, theta_path_deg, rad_path, qrad, fwork) ! should maybe just do linear
+      call drspln(1, ntheta, xleng, rad_path, qrad_l, fwork)
+      call drspln(1, ntheta, xleng, theta_path_deg, qth, fwork)
+      call drspln(1, ntheta, theta_path_deg, xleng, qth_l, fwork) 
+
+c---------------------project ray path onto grid
+	do ila=1,nlay
+	print*,ila!TEST
+	   if((rad_path(1).le.rbnd(ila-1)).and.(rad_path(1).ge.rbnd(ila)))then
+	   iv0=ila
+	   endif
+        enddo
+
+cTEST
+c	print*,"calling isqre",yray(1),xray(1),eq_incr
+
+	ih0=isqre(yray(1),xray(1),nsqrs,nsqtot,nlatzones,n1layer,eq_incr)
+cTEST
+c	print*,"start from pixel",ih0
+	isave(ih0)=1
+	ind0=(iv0-1)*n1layer+ih0
+	call span(ih0,ymi0,yma0,xmi0,xma0,nsqrs,nsqtot,nlatzones,eq_incr)
+	x0=xray(1)
+	y0=yray(1)
+	z0=rad_path(1)
+	d0=0.
+	do i=1,ntheta !loop over all points in ray path
+	if(xma0.eq.360.)xma0=0.
+	if(xmi0.eq.0.)xmi0=360.
+c--determine index of voxel for i-th point on ray path
+	   do ila=1,nlay
+              if((rad_path(i).le.rbnd(ila-1)).and.(rad_path(i).ge.rbnd(ila)))then
+                 iv=ila
+              endif
+           enddo
+	   if(rad_path(i).lt.rbnd(nlay))iv=nlay+1
+	   ih=isqre(yray(i),xray(i),nsqrs,nsqtot,nlatzones,n1layer,eq_incr)
+	   call span(ih,ymi,yma,xmi,xma,nsqrs,nsqtot,nlatzones,eq_incr)
+	   ind=(iv-1)*n1layer+ih
+cTEST
+	isave(ih)=1
+	   if(ind.ne.ind0)then !crossed over to another voxel
+	      if(iv.ne.iv0)then !vertical intersection
+	            if(rad_path(i).eq.z0)then
+	               print*,"exception vert",i,ntheta,rad_path(i),z0
+	               ind=ind0
+	               goto11
+	            endif
+	         ivint=min(iv,iv0)
+	         zint=rbnd(ivint)
+		 xint=x0+(xray(i)-x0)*(zint-z0)/(rad_path(i)-z0)
+		 yint=y0+(yray(i)-y0)*(zint-z0)/(rad_path(i)-z0)
+		 dint=d0+(theta_path_deg(i)-d0)*(zint-z0)/(rad_path(i)-z0)
+		 write(*,"(a8,1x,3(f12.6,1x))")"vertical",zint,xint,yint
+	      else !horizontal intersection
+		 if(dabs(ymi-yma0).lt.toler)then
+	            if(yray(i).eq.y0)then
+	               print*,"exception s to n"
+	               ind=ind0
+	               goto11
+	            endif
+		    yint=ymi
+		    xint=x0+(xray(i)-x0)*(yint-y0)/(yray(i)-y0)
+		    zint=z0+(rad_path(i)-z0)*(yint-y0)/(yray(i)-y0)
+		    dint=d0+(theta_path_deg(i)-d0)*(yint-y0)/(yray(i)-y0)
+		    write(*,"(a8,1x,3(f12.6,1x))")"n to s",zint,xint,yint!test
+		 elseif(dabs(yma-ymi0).lt.toler)then
+	            if(yray(i).eq.y0)then
+	               print*,"exception n to s"
+	               ind=ind0
+	               goto11
+	            endif
+		    yint=yma
+		    xint=x0+(xray(i)-x0)*(yint-y0)/(yray(i)-y0)
+		    zint=z0+(rad_path(i)-z0)*(yint-y0)/(yray(i)-y0)
+		    dint=d0+(theta_path_deg(i)-d0)*(yint-y0)/(yray(i)-y0)
+		    write(*,"(a8,1x,3(f12.6,1x))")"s to n",zint,xint,yint!test
+		 elseif(dabs(xmi-xma0).lt.toler)then
+	            if(xray(i).eq.x0)then
+	               print*,"exception e to w"
+	               ind=ind0
+	               goto11
+	            endif
+	            xint=xmi
+		    yint=y0+(yray(i)-y0)*(xint-x0)/(xray(i)-x0)
+		    zint=z0+(rad_path(i)-z0)*(xint-x0)/(xray(i)-x0)
+		    dint=d0+(theta_path_deg(i)-d0)*(xint-x0)/(xray(i)-x0)
+		    write(*,"(a8,1x,3(f12.6,1x))")"e to w",zint,xint,yint!test
+		 elseif(dabs(xma-xmi0).lt.toler)then
+	            if(xray(i).eq.x0)then
+	               print*,"exception w to e"
+	               ind=ind0
+	               goto11
+	            endif
+	            xint=xma
+		    yint=y0+(yray(i)-y0)*(xint-x0)/(xray(i)-x0)
+		    zint=z0+(rad_path(i)-z0)*(xint-x0)/(xray(i)-x0)
+		    dint=d0+(theta_path_deg(i)-d0)*(xint-x0)/(xray(i)-x0)
+		    write(*,"(a8,1x,3(f12.6,1x))")"w to e",zint,xint,yint!test
+		 else
+		    print*,"problem",j
+		    print*,xmi0,xma0,ymi0,yma0
+		    print*,xmi,xma,ymi,yma
+		    stop "points on ray are too far"
+		 endif
+	      endif
+cTEST
+c	      write(*,"(4(f12.6,2x))")xint,yint,zint,dint
+	      write(55,"(4(f12.6,2x),4(i5,2x))")xint,yint,zint,dint,ih0,iv0,ih,iv
+
+c	      zav=(zint+z0)/2.
+c	      ds=((dint-d0)/radian)*zav
+c	      if(ds.ne.0..and.zint.ge.rcmb.and.z0.ge.rcmb)then
+c	         do l=1,nstartmod-1
+c	            if(radmod(l).ge.zav.and.zav.ge.radmod(l+1))then
+c	               a=(vstart(l+1)-vstart(l))/(radmod(l+1)-radmod(l))
+c	               b= vstart(l)-a*radmod(l)
+c		       vref=a*zav+b
+c		       goto33
+c		    endif
+c	         enddo
+c33	         continue
+c------------------------------------increment matrix (entries and indices)
+c	         irec=irec+1
+c	         write(111,rec=irec)sngl(-ds/vref)
+c	         write(112,rec=irec)ind0
+c	      endif
+
+c--generate vector xlseg by interpolating array xleng at a bunch of points within voxel
+	      dtheta=dint-d0
+	      dincr=dtheta/(nptint*1.d0)
+	      xlseg(1)=drsple(1,ntheta,theta_path_deg,xleng,qth_l,d0) !maybe faster with linear interpolation
+	      do iptint=2,nptint
+	         d1=d0+iptint*dincr
+	         xlseg(iptint)=drsple(1,ntheta,theta_path_deg,xleng,qth_l,d1)
+	         delwin(iptint)=d1
+	      enddo
+	      call radcontribute_drdl_vox(xleng,xlseg,nptint,qrad_l,qth,xtu) !this should be enough 
+c     +		rknt,nknt,numsplit,isplayer,xtu)
+
+	      x0=xint !update x0,y0,z0 
+	      y0=yint
+	      z0=zint
+	      d0=dint
+	      iv0=iv !update other variables
+	      ih0=ih !not strictly needed
+	      ind0=ind 
+	      xmi0=xmi
+	      xma0=xma
+	      ymi0=ymi
+	      yma0=yma
+	   endif !executed if intersection
+11	   continue
+	enddo !end of loop over ray path
+
+cTEST
+	do ih=1,nsqtot(nlatzones+1)
+	   write(57,*)ih,isave(ih)
+	enddo
+c	stop
+
+c---then we can loop over those pixels, for each pixel we have the deltain and deltaout
+c---and rin, rout, so when we call radcontribute we integrate only over that portion of ray
+     
+      do i=1, ngpt
+        call conv2geocen(bslat(i), bslon(i), sptheta, spphi)
+c... transform spline location to source--receiver coordinates
+        call transform(sptheta, spphi, transmat, spth1, spph1)
+c... check if spline is within 2*h of equator.
+	if(abs(spth1-hpi).le.twoh) then
+	   aa=hpi-spth1
+	   bb=sqrt(twohsq-aa*aa)	! distance from center of bell
+	   xmin=spph1-bb 		! boundaries of the bell
+	   xmax=spph1+bb 
+	   if(xmax.gt.twopi) then
+	   	xmax=xmax-twopi
+	   	xmin=xmin-twopi
+	   endif
+	   mode=1
+	   if(ifbetween(0.d0,xmin,del).ne.0.and.ifbetween(0.d0,xmax,del).ne.0) then
+c... path passes bell
+	   	ii0=-1
+	   	ii1=-1
+	   else if(ifbetween(0.d0,xmin,del).ne.0.and.xmax.gt.del) then
+c... path ends in bell
+	   	xmax=del
+	   	ii0=-1
+	   	ii1=ntheta
+	   else if(ifbetween(0.d0,xmax,del).ne.0.and.xmin.lt.0) then
+c... path begins in bell
+	    	xmin=0.d0
+	   	ii0=1
+	   	ii1=-1
+	   else if(ifbetween(xmin,0.d0,xmax).ne.0.and.ifbetween(xmin,del,xmax).ne.0) then
+c... path all in bell
+	   	xmin=0.d0
+	   	xmax=del
+	   	ii0=1
+	   	ii1=ntheta
+	   else
+	   	mode=0
+	   endif
+c
+c ... below finds beginning and ending limits and 
+c ... integrate radially
+c
+           if(mode.ne.0) then
+c...below saves index of point at xmin, lower limit
+	   	if(ii0.lt.0) then
+			do j=1,ntheta
+			   if(theta_path(j).ge.xmin) goto 10
+			enddo
+10			ii0=j
+	   	endif
+c...below saves index of point at xmax, upper limit
+	   	if(ii1.lt.0) then
+			do j=ntheta,1,-1
+			   if(theta_path(j).le.xmax) goto 20
+			enddo
+20	  		ii1=j
+	   	endif
+
+cTEST
+	print*,"xmin,xmax:",xmin*180./pi,xmax*180./pi
+
+
+c
+c ...The following sets the entire path for the integration.  The idea is that 
+c ...the sum of the int(dq/dv1+dq/dv2)=-(travel time) if this works well.
+c ...To test that, uncomment the following four lines and activate the code related
+c ...to sum(i) in radcontribute_drdl.f.  My experience is that S and ScS works very
+c ...well (sum of kernels agrees with travel time to first decimal place) and 
+c ...it is a couple of seconds off for the SS waves.
+c		ii0=2
+c		ii1=ntheta-1
+c		xmin=theta_path(ii0)-(theta_path(ii0)-theta_path(ii0-1))*0.5
+c		xmax=theta_path(ii1)+(theta_path(ii1+1)-theta_path(ii1))*0.5
+c------------------------------------------------------------------------------------
+		indseg=0		
+	      	if(ii0.ne.1) then
+c
+c... account for the extra point (xmin) at the beginning. Add points at xmin and 
+c... at theta_path(ii0)
+c
+			indseg=indseg+1
+          		xlseg(indseg)=drsple(1,ntheta,theta_path,xleng,qth_l,xmin)
+c			indseg=indseg+1
+c          		rr=drsple(1,ntheta,theta_path,rad_path,qrad,xmin)
+c			dx0=(theta_path(ii0)-xmin)*(rr+rad_path(ii0))*0.5
+c			dr0=rad_path(ii0)-rr
+c			xlseg(indseg)=sqrt(dx0*dx0+dr0*dr0)
+	  	endif
+c
+c... copy the segment of the ray to the appropriate arrays-----------------------------
+c
+		do j=0, ii1-ii0
+			indseg=indseg+1
+			ind0=j+ii0
+c			rseg(indseg)=rad_path(ind0)
+c			thseg(indseg)=theta_path(ind0)
+			xlseg(indseg)=xleng(ind0)
+		enddo
+c---account for the extra point at the end---xmax---------------------------------------
+	   	if(ii1.ne.ntheta) then
+			indseg=indseg+1
+          		rr=drsple(1,ntheta,theta_path,rad_path,qrad,xmax)
+			dx1=(xmax-theta_path(ii1))*(rr+rad_path(ii1))*0.5
+			dr1=rad_path(ii1)-rr
+			xlseg(indseg)=xleng(ii1)+sqrt(dx1*dx1+dr1*dr1)
+	   	endif
+		nseg=indseg
+c---------------------------------------------------------------------------------------
+c  integrate radially using Gauss-Legendre 5-point integration
+	   	call radcontribute_drdl_vox(spth1,spph1,h,xleng,xlseg,nseg,qrad_l,qth,
+     +				rknt,nknt,numsplit,isplayer,xtu)
+	   	ind1=0
+		do ipar=1, numinvvar
+			ind=invparlist(ipar)
+	   		do ik=1, nknt
+				ind2=ind1+i
+				if(iray.eq.1) then
+					arow(ind2)=arow(ind2)+arowk(ind,ik)
+				else
+c... subtracting second phase for differential times
+					arow(ind2)=arow(ind2)-arowk(ind,ik)
+				endif
+				ind1=ind1+ngpt
+			enddo
+	   	enddo
+	   endif
+	 endif
+      enddo
+      return
+      end

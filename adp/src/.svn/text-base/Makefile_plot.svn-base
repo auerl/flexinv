@@ -1,0 +1,54 @@
+##########################################################################
+#
+#   makefile for the program PLOTPREP
+#
+#   Julia Schäfer - 24.06.09
+#
+##########################################################################
+
+
+F77 = ifort
+F90 = ifort
+FLAGS_g95 = -O2 -r4
+FLAGS_ifort = -assume byterecl -i8 -I/home/scjulia/progs/SHTOOLS2.3/SHTOOLS/modules -L/home/scjulia/progs/SHTOOLS2.3/SHTOOLS/lib -lSHTOOLS2.3 -lfftw3 -lm -latlas -O3 
+
+
+
+ODIR = ../objects/
+BDIR = ../bin/
+
+#module:
+#        ifort -c inv_adpx_module.f90 -O2 -assume byterecl -i8
+#        mv inv_adpx_module.o ../objects 
+#        mv inv_adpx_module.mod ../objects
+#        ifort -c plotprep_adpx_module.f90 -O2 -assume byterecl -i8
+#        mv plotprep_adpx_module.o ../objects 
+#        mv plotprep_adpx_module.mod ../objects
+
+
+all:	dirs $(BDIR)/plotprep
+
+clean:
+	rm $(BDIR)/*;
+	rm $(ODIR)/*.o
+
+dirs:
+	if [ ! -s $(BDIR) ];then mkdir $(BDIR); fi
+	if [ ! -s $(ODIR) ];then mkdir $(ODIR); fi
+
+
+$(BDIR)/plotprep: $(ODIR)/plotprep_adpx_main.o $(ODIR)/inv_adpx_module.o $(ODIR)/plotprep_adpx_module.o $(ODIR)/param_adpx.o \
+                  $(ODIR)/mapview_3d_adpx.o
+	$(F90) $(FLAGS_ifort)  $(ODIR)/inv_adpx_module.o $(ODIR)/plotprep_adpx_module.o $(ODIR)/param_adpx.o \
+                  $(ODIR)/plotprep_adpx_main.o  $(ODIR)/mapview_3d_adpx.o -o $(BDIR)/plotprep
+
+
+
+$(ODIR)/%.o: %.f90  	
+	$(F90) $(FLAGS_ifort) -c $< -o $(ODIR)/$*.o
+
+$(ODIR)/%.o: %.f  
+	$(F77) $(FLAGS_ifort) -c $< -o $(ODIR)/$*.o
+
+
+

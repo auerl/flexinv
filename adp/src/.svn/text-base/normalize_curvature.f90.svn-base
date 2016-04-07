@@ -1,0 +1,43 @@
+PROGRAM normalize_curvature
+! normalizes the values for the l-curve, determined by lcurve_data.f90
+! Julia 05.02.09
+
+   implicit none
+   character*180				:: file 
+   real,dimension(:),allocatable	:: x,y,a,b,c,d,e,f
+   real					:: maxx, maxy, bla,maxc
+   integer				:: i, imax
+
+   print*, "input file?"
+   read*, file
+   print*, "number of values?"
+   read*, imax
+
+
+   allocate(x(imax), y(imax),a(imax),b(imax),c(imax),d(imax), e(imax), f(imax) )
+
+! read values
+   open (11, file=trim(file))
+   do i=1,imax
+   	print*, i
+	read(11,*) x(i), y(i),a(i),b(i),c(i),d(i), e(i), f(i)
+   end do
+   close (11)
+
+! noralize them and write them in a new file
+
+   maxc=MAXVAL(f)
+
+
+   open (12, file=trim(file)//".nrmlz",status='new')
+   do i=1,imax
+!    	x(i)=x(i)/maxx
+!    	y(i)=y(i)
+	f(i)=f(i)/maxc
+	write(12,*) x(i), y(i), a(i), b(i), c(i),d(i), e(i), f(i)
+   end do
+
+
+
+ 
+END PROGRAM normalize_curvature

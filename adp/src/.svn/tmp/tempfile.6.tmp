@@ -1,0 +1,147 @@
+MODULE inv_adpx_module
+!======================================================================!
+! contains global variables (for all procedures using this module)
+!======================================================================!
+
+  IMPLICIT NONE
+
+   INTEGER                    :: info                 ! to check if routines work properly
+   CHARACTER(LEN=1)   		:: packed
+  !====================================================================!
+  !  some constants
+   REAL, PARAMETER            :: cmbradius=3480.      !radius CMB
+   DOUBLE PRECISION,PARAMETER :: pi=3.1415926536
+   
+  !====================================================================!
+  !  anisotropy
+  INTEGER,PARAMETER     :: npar=2               !number of anisotropy parameters, npar=1: invert for isotropic Vs
+
+  !====================================================================!
+  !  reference grid
+  REAL                  :: refgrid              !pixelsize in reference grid
+  INTEGER               :: iswit                ! to choose if grid is compatible with reference grid (0=no,1=yes)
+
+  !====================================================================!
+  !  defining the grid, number of parameters
+  INTEGER,PARAMETER		:: layernumber=2			! parameterisation is defined according to hitcount in this layer
+  												! the first one should not be chosen since layer 
+  												! is in some areas thinner than the crust and than 
+  												! there is per definition no hitcount since we do not
+  												! invert for the crust
+  REAL                  :: eq_incr              ! size of smallest pixel 
+  INTEGER               :: nlatzones            ! number of latitudinal zones
+  INTEGER               :: nlatzomax            ! maximal number of latitudinal zones in finest grid
+  INTEGER,DIMENSION(:,:),ALLOCATABLE	:: nsqrs    ! number of pixel in each latitudinal zone dimension is (nlatzomax,nlev) 
+  INTEGER,DIMENSION(:,:),ALLOCATABLE	:: nsqtot   ! total number of pixel before actual colatitudinal zone dimension is (nlatzomax+1,nlev)
+  INTEGER,DIMENSION(:),ALLOCATABLE		:: n1layer	! total number of pixel in 1 layer at different pixel size levels
+  INTEGER,PARAMETER     :: n0max=130000 !32000          ! maximum number of pixel per layer
+  INTEGER               :: nlayi                ! number of layers in mantle, read in
+!  INTEGER               :: n                   ! actual number of parameters 
+!  INTEGER               :: n_1                  ! actual number of pixels
+
+  ! outer core ========================================================!
+  INTEGER,PARAMETER     :: iflaouc=0            ! iflaouc=1/0 include/not outer core structure in the inversion
+  INTEGER,PARAMETER     :: nlayouc0=10          ! number of layers in core
+  INTEGER,PARAMETER     :: nlayouc=nlayouc0*iflaouc         ! actual number of layers in outer core (takes into account if outer core structure is included in inversion)
+  INTEGER,PARAMETER     :: nparoucmax=iflaouc*n0max*nlayouc ! maximum number of parameters to invert for in outer core ????
+
+  ! CMB structure =====================================================!
+  INTEGER,PARAMETER     :: iflacmb=0            ! iflaouc=1/0 include/not CMB structure in the inversion
+  INTEGER               :: ngridcmb             ! actual number of parameters to invert for at CMB
+  INTEGER,PARAMETER     :: ngridcmbmax=n0max*iflacmb ! maximum number of parameters to invert for at CMB
+
+  ! total =============================================================!
+  INTEGER               :: nlay                 ! total number of layers to invert for
+  INTEGER,PARAMETER     :: nlaym=12             ! maximum possible number of layers 
+  INTEGER,PARAMETER     :: n1max=n0max*nlaym    ! maximum number of pixel  
+  INTEGER,PARAMETER     :: nmax=npar*n1max+ngridcmbmax+nparoucmax ! maximum number of parameters 
+
+  ! for adaptive parameterization =====================================!
+  INTEGER               :: outsideEU            ! if outside a certain region (Europe) biggest pixel should be assumemd set to 1 
+  INTEGER               :: fact                 ! relation between reference and finest grid
+  INTEGER               :: nlev,lev             ! max. number of different pixel sizes, level index for ithres
+  INTEGER,DIMENSION(:),ALLOCATABLE  :: ithres   ! threshold values for hitcount at different levels of parameterization. Dimension is nlev-1
+!  INTEGER,DIMENSION(nmax)     :: htcad          ! array with hitcount values for the adaptive grid
+  INTEGER,DIMENSION(:),ALLOCATABLE  :: htcad          ! array with hitcount values for the adaptive grid
+  INTEGER                     :: n1layer_adpx   ! total number of pixel in 1 adaptive parameterized layer 
+  INTEGER                     :: npx_adpx       ! total number of pixel for adaptive parameterized model
+  INTEGER                     :: npar_adpx      ! total number of parameter for adaptive parameterized model: npx_adpx*npar
+!  INTEGER  ,DIMENSION(n0max)  :: level          ! stores for each pixel in first layer the level
+  INTEGER,PARAMETER     :: nadmax=129600         ! = 7200*18, 32 GB RAM, maximum number of parameters to invert for
+
+
+  !====================================================================!
+  ! matrix in adaptive grid
+  INTEGER,DIMENSION(nmax)           :: inew      ! new index in adaptive grid for all of the smallest pixel
+  REAL,DIMENSION(:),ALLOCATABLE     :: ata,atd
+  REAL,DIMENSION(:,:),ALLOCATABLE     :: ata2
+
+
+  !====================================================================!
+  ! matrices, vectors, hitcounts, ...
+  INTEGER                           :: m, nonz   ! maximum dimension of right-hand-side vector and sparse matrix array
+  INTEGER,DIMENSION(6)              :: IPO
+!  REAL,DIMENSION(nmax)              :: v,w,x,se,aty
+!  REAL,DIMENSION(:),ALLOCATABLE     :: x,tt
+!  REAL,DIMENSION(:),ALLOCATABLE     :: t        ! dimension is m, which has to be read from user input
+!  INTEGER,DIMENSION(:) ,ALLOCATABLE :: indx     ! dimension is nonz
+!  INTEGER,DIMENSION(:),ALLOCATABLE  :: mpoin    ! dimension is 0:m
+  REAL                              :: relwei   ! weight for the data
+  INTEGER                           :: ndata    ! number of observations in this subset
+  INTEGER(8)                        :: jj       ! jj: index matrix-element
+  INTEGER,DIMENSION(:),ALLOCATABLE  :: htc      ! hitcount
+
+
+  !====================================================================!
+  ! loops
+  INTEGER                           :: i,j
+
+  !====================================================================!
+  ! characters
+<<<<<<< .mine
+<<<<<<< .mine
+  CHARACTER(LEN=80)           :: namexxx,namepoi,nameind,namerhs,namerdamp,namexxxad,nameindad
+  CHARACTER(LEN=80)           :: namehits,namegrid, nameadpx,namexsadgrid,namenumberadpx,namehtcadgrid  ! files for matrix: values, values/row, index in row; right hand sides, hitcount, adaptive grid information
+=======
+  CHARACTER(LEN=68)           :: namexxx,namepoi,nameind,namerhs
+=======
+  CHARACTER(LEN=68)            :: namerhs
+>>>>>>> .r36
+  CHARACTER(LEN=100)           :: namexxx,namepoi,nameind,namerdamp,namexxxad,nameindad
+  CHARACTER(LEN=100)           :: namehits,namegrid, nameadpx,namexsadgrid,namenumberadpx,namehtcadgrid  ! files for matrix: values, values/row, index in row; right hand sides, hitcount, adaptive grid information
+>>>>>>> .r35
+!  CHARACTER(LEN=8)            :: chnpar
+
+  !====================================================================!
+  ! damping
+  ! roughness damping, additional norm damping and anisotropy damping (only for anisotropic inversions)
+  INTEGER,PARAMETER     :: idamp=1,iaddnormdmp=0,isodamp=0
+  REAL,PARAMETER        :: wisot=150.
+  REAL,DIMENSION(npar)  :: wgrad    ! horizontal roughness damping, every parameter has own value
+  REAL,DIMENSION(nlaym) :: wgradv   ! vertical roughness damping, every layer has own value
+  ! mid mantle layers =================================================!
+  REAL                  :: dampmm   ! additional norm damping for mid-mantle layers
+  REAL,PARAMETER        :: xumd_frac=0.13333333, xlmd_frac = 0.13333333 ! fraction of upper/lower boundary layer
+  INTEGER               :: nlayum,nlaylmm,nlaymm      ! number of upper,lower mantle layers, number of midmantle layers 
+  ! outer core ========================================================!
+  INTEGER,PARAMETER     :: idampoucn=0,idampoucr=0
+  REAL,PARAMETER        :: dampoucn=100.,dampoucr=100.
+  ! CMB ===============================================================!
+  INTEGER,PARAMETER     :: idampcmb=0,idampcmb2=0
+  REAL,PARAMETER        :: dampcmb=1500.,dampcmb2=300.
+  ! norm damping ======================================================!
+  REAL                  :: damp 
+  REAL,DIMENSION(:),ALLOCATABLE  :: ndampvec   ! norm damping, every parameter has own value
+   ! anisotropy damping ======================================================!
+  REAL                  :: anidamp  
+  !====================================================================!
+  ! index of first and last row of the part of the matrix to project
+  INTEGER               :: r1,r2
+
+  !====================================================================!
+  ! results
+  CHARACTER(LEN=80)     :: name
+
+
+
+END MODULE inv_adpx_module

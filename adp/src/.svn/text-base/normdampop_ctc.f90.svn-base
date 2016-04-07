@@ -1,0 +1,51 @@
+SUBROUTINE NORMDAMPOP_CTC
+
+ !*********************************************************************!
+ !
+ ! J. Schaefer, 05.05.10
+ !
+ ! improved version of normdampop_btb, now as a subroutine 
+ ! and output also in vector stored in the module
+ !
+ !*********************************************************************!
+
+  USE inv_adpx_module
+  IMPLICIT NONE
+  INTEGER              :: ipx,bla,bla2, mpx
+  REAL*8 ,dimension(4) :: area
+
+
+  print*,"calculate norm damping operator"
+  write(82,*)"calculate norm damping operator"
+  
+  
+  open(11,file=trim(namegrid),status="old")
+  open(23,file="normdampop_ctc.dat")
+
+ !====================================================================!
+ ! area of pixels with different size
+ 
+  area(1)=(5*111.1)**2
+  area(2)=(2.5*111.1)**2
+  area(3)=(1.25*111.1)**2
+  area(4)=(0.625*111.1)**2
+      
+ !====================================================================!
+ ! read to which size-group the pixel belongs to 
+ ! the value for the norm damping operator multiplied by its transposed 
+ ! equals the squared area of the coresponding pixel
+ 
+ 
+  do i=1,n1layer_adpx
+      read(11,*) bla, lev, ipx, bla2          
+      write(23,*) area(lev)
+      ndampvec(i) =  damp**2 * area(lev)  
+      print*,'pixel number=',ipx,' area=', area(lev)
+  end do
+  
+  print*, " ... done"
+  write(82,*)" ... done"
+
+END SUBROUTINE NORMDAMPOP_CTC
+
+

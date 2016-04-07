@@ -1,0 +1,104 @@
+
+      subroutine radcontribute(th,phi,h,tseg,rseg,nseg,
+     +		rknt,nknt)
+c
+c compute radial contribution and multiply to the lateral contribution of
+c splines.  Note fdelta computes horizontal spline values for a given distance
+c away from spline center, and bsplinefun computes radial spline function value.
+c This routine integrates over dlength using  Gauss-Legendre 10-point integration
+c
+c input:   th, phi     --- geocentric locations of splines
+c 	   h           --- size of the spherical splines
+c 	   tseg,rseg   --- running angle, radius along segment
+c	   nseg        --- total number of points along segment
+c 	   rknt, nknt  --- radius and number of radial knots
+c	   arowk       --- contributions
+c
+c
+      implicit double precision (a-h,o-z)
+      include "invparm.h"
+      common/amatrix/arow(maxparm),indarow(maxparm),nonzero_a
+      common/invopt/numinvvar,invparlist(5)
+      common/radcontrib/qseg(5,3200),arowk(5,maxrknot)
+      dimension tseg(1),rseg(1)
+      dimension rknt(1), arowk(5,maxrknot)
+      dimension func(3200),b0(4),b1(4)
+      dimension x(5),w(5),dxp(10),dxm(10),dxpf(10),dxmf(10)
+      dimension valp(5), valm(5), qp(5), qm(5), sum(5)
+      data x/.1488743389d0,.4333953941d0,.6794095682d0,
+     *       .8650633666d0,.9739065285d0/
+      data w/.2955242247d0,.2692667193d0,.2190863625d0,
+     *       .1494513491d0,.0666713443d0/
+
+	print*, 'nseg=', nseg
+	do i=1, 2
+		print*, i, qseg(3,i), qseg(4,i)
+		sum(i)=0.d0
+	enddo
+	do i=1, nseg
+		write(3333,*) tseg(i)*reprad, rseg(i)
+	enddo
+      do i=1, 5
+      	do k=0, nknt
+		arowk(i,k)=0.d0
+	enddo
+      enddo
+
+      do i=1, nseg
+	 dist=dist_phi(th,phi,tseg(i))
+	 func(i)=fdelta(dist,h)
+      enddo
+c
+c...Gauss-Legendre integration over the ray path dl.
+c
+      do i=1, nseg-1
+	 xm = 0.5d0*(tseg(i+1)+tseg(i))
+	 xr = 0.5d0*(tseg(i+1)-tseg(i))
+	 do j=1, 5
+c... find theta values at pole locations of weighting function
+		dx = xr*x(j)
+		xmpdx = xm + dx
+		xmmdx = xm - dx
+c... linearly interpolate r
+          	call xlinearint(xmpdx,tseg(i),tseg(i+1),rseg(i),rseg(i+1),rp)
+          	call xlinearint(xmmdx,tseg(i),tseg(i+1),rseg(i),rseg(i+1),rm)
+c... linearly interpolate dq/dv for the selected velocities, the orders are
+c... Vph, Vpv, Vsh and Vsv.
+		do ipar=1, numinvvar
+		   ind=invparlist(ipar)
+         	   call xlinearint(xmpdx,tseg(i),tseg(i+1),qseg(ind,i),qseg(ind,i+1),qp(ipar))
+         	   call xlinearint(xmmdx,tseg(i),tseg(i+1),qseg(ind,i),qseg(ind,i+1),qm(ipar))
+c		if(abs(qp(ipar)).gt.1000.d0.or.abs(qm(ipar)).gt.1000) goto 10
+	 		if(ipar.eq.1) write(3434,*) xmpdx, qp(ipar)
+	 		if(ipar.eq.2) write(3435,*) xmpdx, qp(ipar)
+c			print*, ind, xmpdx, qseg(ind,i),qseg(ind,i+1),qp(ipar)
+c			print*, 'xmm', xmmdx, qseg(ind,i),qseg(ind,i+1),qm(ipar)
+		enddo
+		call drdzeta(rp,valp,1,xmpdx,viso)
+		rpviso=viso
+		call drdzeta(rm,valm,1,xmmdx,viso)
+		rmviso=viso
+c
+c ...Instead of using absolute perturbation for inversion this uses
+c ...dv/v0 or deta/eta0 as a model parameters.  valp and valm contains (dr/dzeta)*v0 terms.
+c ...drdzeta = (dr/dzeta)
+		do ipar=1, numinvvar
+			ind=invparlist(ipar)
+			qp(ipar) = qp(ipar)*valp(ind)*xr
+			qm(ipar) = qm(ipar)*valm(ind)*xr
+c			print*, qp(ipar),valp(ind), xr
+		enddo
+		do ipar=1, numinvvar
+			sum(ipar)=sum(ipar)+w(j)*(qp(ipar)+qm(ipar))
+		enddo
+		
+c		print*, 'rpviso=', rpviso, '   rmviso=', rmviso
+c		call getbsreg(rm,rknt,nknt,ireg)
+c      		call bsplinefun(ireg,rb,rknt,nknt,b1)
+10		continue
+	 enddo
+      enddo
+	print*, sum(1), sum(2)
+	stop
+      return
+      end

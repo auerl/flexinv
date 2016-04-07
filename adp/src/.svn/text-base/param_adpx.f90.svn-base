@@ -1,0 +1,471 @@
+SUBROUTINE PARAM_ADPX
+
+ !*********************************************************************!
+ !
+ !    J. Schaefer 07/2009
+ !    
+ ! define adaptive parameterization
+ !
+ ! use from module  : refgrid, iswit, nlev, npar, nlayi, namehits, nadmax, outsideEU, namegrid
+ !					  layernumber, iflacmb
+ ! gives to module	: nlatzones0, nsqrs(k,lev), nsqtot(k,lev), n1layer(lev), 
+ !					  htcadn1layer_adpx, npx_adpx, npar_adpx, ngridcmb, htc   
+ !
+ !*********************************************************************!
+
+  USE inv_adpx_module
+  IMPLICIT NONE
+  INTEGER				:: k,k0
+  REAL                  :: colat,theta,deltalon,size               
+  INTEGER               :: nlatzones0                 	! latitudinal zones in reference grid
+  INTEGER				:: ipxnew, ipxnewtmp			! total number of new pixel
+  INTEGER,DIMENSION(4**nlev)  :: iwithin				! indexes of the smallest pixel contained in a pixel
+  INTEGER				:: htctmp,htctmp_layernumber 	! temporary hitcount for all smallest pixel in one pixel in first layer and layer for which parameterization is defined
+  INTEGER                     :: ifa                  	! actual pixel size / smallest pixel size
+  INTEGER                     :: ipx, ipx0, ipxin0    
+  INTEGER                     :: layer                	! index for loop over layers
+  INTEGER,DIMENSION(nlatzomax) :: nsqrstmp, nsqtottmp
+  INTEGER                     :: lev0
+  REAL                        :: xlamin,xlamax,xlomin,xlomax
+  INTEGER                     :: ipx1layer
+  
+  
+  !====================================================================!
+  ! check if all necessary information available in the module
+  write(82,*) "informations used from the module:"
+  write(82,*) "pixelsize in reference grid: 		", refgrid   
+  write(82,*) "grid compatible with reference grid:	", iswit 
+  write(82,*) "# different size pixels: 			", nlev
+  write(82,*) "# parameters: 						", npar
+  write(82,*) "# layers: 							", nlayi
+  write(82,*) "hitcount read from file: 			", namehits
+  write(82,*) "grid information written to: 							", namegrid
+  write(82,*) "outside Europe uniform/adaptive grid: 					", outsideEU
+  write(82,*) "hitcount of this layer is used to define adaptive grid:	", layernumber
+  write(82,*) "include/not CMB structure in the inversion				", iflacmb
+
+  nlatzones0=180/refgrid 
+  print*, "nlatzones=", nlatzones0
+  write(82,*) "nlatzones=", nlatzones0
+
+
+
+ !====================================================================!
+ ! define rough grid, if requested compatible with reference grid
+ ! level 1 ===========================================================!
+ 
+ 
+  lev=1
+  colat=-refgrid/2.
+  n1layer(lev)=0
+  
+  do k=1,nlatzones0
+      colat=colat+refgrid
+      theta=(colat/180.)*pi
+
+ !--for this latitudinal zone, compute number of blocks (nsqrs)
+      deltalon=refgrid/(sin(theta))
+      nsqrs(k,lev)=(360./deltalon)+1
+      if(mod(nsqrs(k,lev),2).ne.0)nsqrs(k,lev)=nsqrs(k,lev)-1
+
+ !--if requested, correct nsqrs(k,lev) so the grid is compatible to reference grid
+      if(iswit.eq.1)then
+           if(360./nsqrs(k,lev).ge.refgrid)then                ! blocks > reference grid
+100             if(mod(360./nsqrs(k,lev),refgrid).ne.0)then    
+                    nsqrs(k,lev)=nsqrs(k,lev)+1                   ! add blocks -> blocks become smaler
+                    goto 100
+                 else
+                 endif
+           elseif(360./nsqrs(k,lev).lt.refgrid)then            ! blocks < reference grid
+101             if(mod(refgrid,360./nsqrs(k,lev)).ne.0)then
+                    nsqrs(k,lev)=nsqrs(k,lev)-1                   ! subtract blocks -> blocks become bigger
+                    goto 101
+                 else
+                 endif
+           endif
+         endif
+
+ !     print*, "k=",k," nsqrs=", nsqrs(k,lev)," lon=", 360./nsqrs(k,lev)
+           if(MOD(nsqrs(k,lev),2).ne.0)stop "nsqrs has to be even"
+
+      nsqtot(k,lev)=n1layer(lev)
+      n1layer(lev)=n1layer(lev)+nsqrs(k,lev)
+ ! print*, lev, k, nsqtot(k,lev)
+  enddo
+
+!   nsqtot(nlatzones+1,lev)=n1layer(lev)
+!   print*, nsqtot(nlatzones+1,lev), nlatzones, nlatzones0   
+!   print*,'pixels at resolution level 1: ',n1layer(lev)
+   nsqtot(nlatzones0+1,lev)=n1layer(lev)
+!  print*, nsqtot(nlatzones0+1,lev), nlatzones, nlatzones0   
+  print*,'pixels at resolution level 1: ',n1layer(lev) 
+  write(82,*) 'pixels at resolution level 1: ',n1layer(lev) 
+
+ !====================================================================!
+ ! define finer grids compatible with rough one  
+ ! level 2,nlev ======================================================!
+
+  do lev=2,nlev
+	   ifa=2**(lev-1)
+	   size=refgrid/ifa
+	   nlatzones=180./size
+	   colat=-size/2.
+	   n1layer(lev)=0
+	   do k=1,nlatzones
+	      k0=((k-1)/2)+1
+	      nsqrs(k,lev)=nsqrs(k0,lev-1)*2
+          nsqtot(k,lev)=n1layer(lev)
+          n1layer(lev)=n1layer(lev)+nsqrs(k,lev)
+	   enddo
+	   nsqtot(nlatzones+1,lev)=n1layer(lev)
+
+ !print*, nlatzones, lev,  nsqtot(nlatzones+1,lev)
+!	   nzones(lev)=n1layer(lev)
+	   print*,n1layer(lev)," pixels at resolution level",lev
+         write(82,*),n1layer(lev)," pixels at resolution level",lev
+
+
+  enddo
+
+ !====================================================================!
+ ! read hitcountfile
+ !====================================================================!
+
+  open(27,file=trim(namehits))
+  allocate (htc(n1layer(nlev)*npar*nlayi), htcad(nadmax))
+  do i=1,nadmax
+     htcad=0
+  end do
+  write(82,*) "reading hitcount values 1 till ", n1layer(nlev)*npar*nlayi, "from file ", trim(namehits)
+  do i=1,n1layer(nlev)*npar*nlayi
+    read(27,*)j,htc(i)
+!  print*, i,j,htc(i)
+!       if(i/=j) then
+!             print*,"problems with reading hitcount file"
+!             stop
+!       end if
+  enddo
+  print*, j, "hitcount values read"
+  write(82,*)j, "hitcount values read"
+  close(27)
+
+ !====================================================================!
+ ! define adaptive grid
+ !
+ ! We start at the lowest level. If the hitcount is below the threshold the pixel can't be refined 
+ ! and the pixel just gets a new pixel number. Than the next level is checked in the same way, 
+ ! but just pixel which do not have a new pixelnumber yet. At the end the pixel in the highest level,
+ ! which do not have a new number yet also get a new number.
+ !====================================================================!
+
+  open(100,file=trim(namegrid))
+  ipxnew=0
+  ipxnewtmp=0
+
+  if (outsideEU==1) then
+  write(82,*) "start defining grid outside Europe"
+ !====================================================================!
+ ! keep big pixel outside Europe
+ !====================================================================!
+
+  lev=1
+  ifa=1
+  size=refgrid/ifa
+  nlatzones=180./size
+  do k=1,nlatzones
+    nsqrstmp(k)=nsqrs(k,lev)
+    nsqtottmp(k)=nsqtot(k,lev)
+  enddo
+  nsqtottmp(nlatzones+1)=nsqtot(nlatzones+1,lev)
+
+
+  do ipx=1,n1layer(1)
+      if (ipx==1)   write(82,*) "call rang"
+      call rang(ipx,xlamin,xlamax,xlomin,xlomax,nsqrstmp,nsqtottmp,nlatzones,size,nlatzomax)
+      if (ipx==1)   write(82,*) "... rang done"
+	  if (xlamin>=70.or.xlamax<=30.or.(xlomax<=335.and.xlomin>=45)) then ! outside the region we focus on
+!	  if (xlamin>=70.or.xlamax<=30.and.(xlomax<=335.or.xlomin>=45)) then ! outside the region we focus on
+!      if (xlamin>=70.or.xlamax<=30) then ! outside the region we focus on
+!      if (xlomax<=335.and.xlomin>=45) then ! outside the region we focus on
+      if (ipx==1)   write(82,*) "call pxwithin"
+       
+       write(77,*) xlamin, xlamax, xlomax, xlomin
+       
+         call pxwithin(ipx,iwithin) ! check for lowest order pixel inside 
+         if (ipx==1)   write(82,*) " ... pxwithin done"
+         htctmp=0                   ! count together hits of all of the smallest pixel in this pixel                     
+         do k=1,4**(nlev-lev)       ! loop over number of smallest pixel in pixel of actual level
+            htctmp=htctmp+htc(iwithin(k))
+         enddo
+         ipxnew=ipxnew+1
+         do k=1,4**(nlev-lev)       ! all small pixel inside are asigned to be a big pixel
+            inew(iwithin(k))=ipxnew
+         enddo
+         htcad(ipxnew)=htctmp       ! hitcount of new pixel is hitcount of all small pixel together
+         write(100,"(4I15)")ipx,lev,ipxnew,htctmp
+!         level(ipxnew)=lev
+!     end if
+      end if 
+  end do
+  write(82,*) "... outside Europe done"
+  end if
+
+ !====================================================================!
+ ! inside Europe
+ !====================================================================!
+	
+  do lev=1,nlev-1			! rough -> fine
+	 do ipx=1,n1layer(lev)
+         ! in iwithin the number of the finest pixels within the actual one is stored
+         if (ipx==1)   write(82,*) "call pxwithin"
+         call pxwithin(ipx,iwithin) 
+         if (ipx==1)   write(82,*) " ... pxwithin done"
+  !test
+!  if (lev.eq.1.and.ipx.lt.3) then
+!  print*, lev, ipx
+!  print*, iwithin
+!  print*, inew(iwithin(1:16))
+!  end if
+
+	     if(inew(iwithin(1)).eq.0)then	! only check for hitcount if not already new index assigned for lower level
+	     
+	        ! count together hits of all of the smallest pixel in this pixel
+   		    htctmp=0		 
+                htctmp_layernumber=0
+
+		    do k=1,4**(nlev-lev)		! loop over number of smallest pixel in pixel of actual level
+                   htctmp=htctmp+htc(iwithin(k))      ! hitcount in first layer
+		       htctmp_layernumber=htctmp_layernumber+htc(iwithin(k)+n1layer(nlev)*layernumber) ! hitcount in layer for which parameterization is defined
+		    enddo
+		 
+		    if(htctmp_layernumber.lt.ithres(lev))then	! if hitcount lower than threshold all pixel get the same new index = same pixel
+		       ipxnew=ipxnew+1
+		       do k=1,4**(nlev-lev)
+		          inew(iwithin(k))=ipxnew
+		       enddo
+		       htcad(ipxnew)=htctmp		! hitcount of new pixel is hitcount of all small pixel together
+		       write(100,"(4I15)")ipx,lev,ipxnew,htctmp
+!                   level(ipxnew)=lev
+                else                          ! otherwise pixel would be splitted up, but in case one pixel has a number of hits below a certain minimum value the bigger pixel is kept as well
+                   do j=1,4**(nlev-lev)
+                        if (htc(iwithin(j)+n1layer(nlev)*layernumber) < ithres(nlev)) then
+                              ipxnew=ipxnew+1
+                              do k=1,4**(nlev-lev)
+                              inew(iwithin(k))=ipxnew
+                              enddo
+                              htcad(ipxnew)=htctmp         ! hitcount of new pixel is hitcount of all small pixel together
+                              write(100,"(4I15)")ipx,lev,ipxnew,htctmp
+!                              level(ipxnew)=lev
+                              go to 11
+                        end if
+                   end do
+11  continue !pixel aalready assigned loop does not have to be continued
+		    endif
+	     endif
+	   enddo
+	   print*,ipxnew-ipxnewtmp," inversion coefficients at level ",lev
+         write(82,*) ipxnew-ipxnewtmp," inversion coefficients at level ",lev
+	   ipxnewtmp=ipxnew
+  enddo
+  ! assign unassigned pixels to level nlev (highest resolution)
+  do ipx=1,n1layer(nlev)
+    if(inew(ipx).eq.0)then
+      ipxnew=ipxnew+1
+      inew(ipx)=ipxnew
+      htcad(ipxnew)=htc(ipx+n1layer(nlev)*layernumber)
+      write(100,"(4I15)")ipx,nlev,ipxnew,htc(ipx)
+!      level(ipxnew)=lev
+    endif
+  enddo
+
+  close(100)
+  print*,ipxnew-ipxnewtmp," inversion coefficients at level ",nlev
+  write(82,*) ipxnew-ipxnewtmp," inversion coefficients at level ",nlev
+  print*,ipxnew," inversion coefficients total"
+  write(82,*) ipxnew," inversion coefficients total"
+  n1layer_adpx=ipxnew
+  npx_adpx=ipxnew*nlayi                               ! total number of pixel
+  npar_adpx= npx_adpx*npar                            ! total number of parameter
+
+
+ !======================================================================!
+ ! check if too many parameter/pixel assumed 
+ !====================================================================!
+
+!  if(n1layer_adpx.gt.n0max)stop "too many pixels"    ! n0max is parameter, total number of possible pixel in 1 layer
+
+!  if(n1layer_adpx.gt.n0max)stop "too many pixels"    ! n0max is parameter, total number of possible pixel in 1 layer
+  if(npar_adpx.gt.nadmax)stop "too many parameter"     ! nmax is parameter, total number of possible parameters to invert for
+  ngridcmb=n1layer_adpx*iflacmb                      ! number of pixel at CMB, if inverted for same number as for mantle layers
+  print*,'total number of parameters',npar_adpx, 'at CMB', ngridcmb
+  write(82,*) 'total number of parameters',npar_adpx, 'at CMB', ngridcmb
+
+! !  n_0=n1layer(nlev)                                  ! pixel 1 layer
+!   n=n1layer_adpx*nlay*npar                           ! total number of parameter
+!   write(chnpar,"(i8.8)")n
+!   n_1=n1layer_adpx*nlay                              ! total number of pixel
+!   if(n1layer_adpx.gt.n0max)stop "too many pixels"    ! n0max is parameter, total number of possible pixel in 1 layer
+!   if(n.gt.nmax)stop "too many voxels"           ! nmax is parameter, total number of possible parameters to invert for
+!   ngridcmb=n1layer_adpx*iflacmb                      ! number of pixel at CMB, if inverted for same number as for mantle layers
+!   print*, "parameterization OK"
+!   print*,'total number of parameters',n, 'at CMB', ngridcmb
+
+
+
+ !====================================================================!
+ ! project this grid also on other layers
+ !====================================================================! 
+
+  do layer=2,nlayi*npar
+    do ipx1layer=1,n1layer(nlev)
+      ipx=ipx1layer+n1layer(nlev)*(layer-1)                 ! pixelnumber in finest grid
+      inew(ipx)=inew(ipx1layer)+n1layer_adpx*(layer-1)      ! pixelnumber in adaptive grid depending of number in finest grid
+      htcad(inew(ipx))=htcad(inew(ipx))+htc(ipx)
+    end do
+  end do 
+  write(82,*) 'grid projected on other layers'
+
+  if (n1layer_adpx*npar*nlayi /= maxval(inew)) stop "problem" 
+
+ !====================================================================!
+ ! save adaptive grid info to file
+ !====================================================================!
+
+  open(99,file=trim(nameadpx))
+  open(101,file=trim(namehtcadgrid))
+  print*, n1layer(nlev)*nlayi*npar, "values in htc.adgrid"
+  do ipx=1,n1layer(nlev)*nlayi*npar !npx_adpx !n1layer(nlev)
+     write(99,*)ipx,inew(ipx)
+     write(101,*)ipx,htcad(inew(ipx))
+  enddo
+  deallocate (htc)
+
+  close(99)
+  close(101)
+
+
+  OPEN(102,file=trim(namenumberadpx))
+    write(102,*)n1layer_adpx, npx_adpx
+  close (102)
+
+ ! print*, "open ", namegrid
+  open(100,file=trim(namegrid),status='old')
+  open(103,file=trim(namegrid)//".gmt")
+  open(104,file=trim(namegrid)//".sh")
+  
+
+  lev0=0
+  do i=1,n1layer_adpx
+      read(100,*) ipx,lev,ipxnew,htctmp
+    !  numto=nzones(lev)
+     if(lev.ne.lev0)then
+! print*, "loooop"
+      ifa=2**(lev-1)
+      size=refgrid/ifa
+      nlatzones=180./size
+      do k=1,nlatzones
+         nsqrstmp(k)=nsqrs(k,lev)
+         nsqtottmp(k)=nsqtot(k,lev)
+      enddo
+      nsqtottmp(nlatzones+1)=nsqtot(nlatzones+1,lev)
+      lev0=lev
+     end if
+ ! if (ipxnew<10) print*, ipx,nlatzones,size, nlatzomax
+      call rang(ipx,xlamin,xlamax,xlomin,xlomax,nsqrstmp,nsqtottmp,nlatzones,size,nlatzomax)
+! print*, "test"
+      write(103,"(a1)")">"
+      write(103,*)xlomin,xlamin
+      write(103,*)xlomin,xlamax
+      write(103,*)xlomax,xlamax
+      write(103,*)xlomax,xlamin
+
+      write(104,"(I7,4(1X,F10.3))")ipxnew,xlamin,xlamax,xlomin,xlomax
+ !     if (ipxnew.lt.10) print*, "sh:",ipxnew,xlamin,xlamax,xlomin,xlomax
+
+  end do
+  close(100)
+  close(103)
+  close(104)
+
+  write(82,*) 'adaptive grid info stored'
+
+
+  go to 12 
+9999 CONTINUE ! jump here upon error
+  IF (info .NE. 0) WRITE(*,*)'Controlled termination on error.'
+
+12 continue
+  info=0
+  RETURN
+  END SUBROUTINE PARAM_ADPX
+
+
+!**********************************************************************!
+!     SUBROUTINES
+!**********************************************************************!
+      subroutine rang(nsq,xlamin,xlamax,xlomin,xlomax,nsqrs,nsqtottmp,nlatzones,size,nlatzomax)
+!c
+!c finds the coordinate range of square number 'nsq'
+!c
+!c     dimension nsqrs(nlatzones),nsqtot(nlatzones)
+!      parameter(nlatzomax=180,nlatzhmax=720)
+      dimension nsqrs(nlatzomax),nsqtottmp(nlatzomax+1)
+!      dimension nsqrsh(nlatzhmax),nsqtoth(nlatzhmax+1)
+!c
+
+ !test
+ !  print*, "inside rang1"
+
+      lazone=2
+!  if (nsq<30) print*, "nsq:",nsq, size
+ ! print*, nsqtottmp(1:20)
+! print*, "bla"
+      do while (nsq.gt.nsqtottmp(lazone))
+         lazone=lazone+1
+      enddo
+ !test
+  ! print*, "inside rang2"
+
+      lazone=lazone-1
+      nnsq=nsq-nsqtottmp(lazone)
+      xlamin=90.-lazone*size
+      xlamax=xlamin+size
+      grsize=360./nsqrs(lazone)
+      xlomax=nnsq*grsize
+      xlomin=xlomax-grsize
+ !test
+ !  print*, "inside rang3"
+
+      return
+      end
+  
+!**********************************************************************!
+!     pxwithin
+
+SUBROUTINE pxwithin(ipx,iwithin)
+! finds indexes of level-nlev pixels within level-n pixel ipx
+  USE inv_adpx_module
+  IMPLICIT NONE
+  integer :: lzin
+  integer, dimension(4**nlev)  :: iwithin
+  INTEGER                      :: ipx, ipx0, ipxin0,k,ifa,n
+
+  ifa=2**(nlev-lev)				! = actual pixel size / smallest pixel size
+  k=1
+  do while(ipx.gt.nsqtot(k,lev))	      ! search for number of pixel till actual latitudinal zone in actual pixel level
+	   k=k+1
+  enddo
+  ipx0=ipx-nsqtot(k-1,lev)-1		      ! number of pixel before actual pixel counted from beginning of this latitudinal zone
+  ipxin0=ipx0*ifa					! same but for finest pixel
+  n=1
+  do i=1,ifa					! determines pixel within this pixel
+	   lzin=(k-2)*ifa+i
+	   do j=1,ifa
+	      iwithin(n)=nsqtot(lzin,nlev)+ipxin0+j
+	      n=n+1
+	   enddo
+  enddo
+
+ return
+ 	
+END SUBROUTINE pxwithin

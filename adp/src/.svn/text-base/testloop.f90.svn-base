@@ -1,0 +1,44 @@
+PROGRAM testloop
+
+  implicit none
+  INTEGER   :: k,numb,n1layer_adpx,kk,j,i
+
+  numb=3
+  n1layer_adpx=4
+
+
+  do k=1,numb
+  do j=1,n1layer_adpx !column
+
+      if (k/=1) then !rectangle
+            do kk=1,k-1 !repetition of row
+                  do i=1,n1layer_adpx !row
+   write(88,*) i,j
+                  end do
+            end do
+      end if
+
+
+      do i=1,j    !triangle, row
+   write(88,*) i,j
+      end do
+  end do
+  end do
+
+   write(88,*) i,j
+!***********************************++++
+         if (i==j) then !diagonal
+            if (k==1.or.numb) then
+               print*,' 1'
+            else
+               print*,'2'
+            end if
+         end if
+
+         if (k<nlayi.or.k>=nlayi.and.k<numb) then
+            if(j==(i+n1layer_adpx))  print*, '-1'
+         end if
+
+
+!************************
+END PROGRAM testloop

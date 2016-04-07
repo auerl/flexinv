@@ -1,0 +1,46 @@
+PROGRAM testloop2
+
+  implicit none
+  INTEGER   :: k,number,n1layer_adpx,kk,j,i,jj,nlayi
+
+
+ nlayi =4
+ number=8
+ n1layer_adpx=3
+
+ jj=0
+
+  do k=1,number
+  do j=1,n1layer_adpx !column
+
+
+     jj=jj+n1layer_adpx*(k-1)
+
+      do i=1,j    !triangle, row
+         jj=jj+1
+
+         ! vertical roughness damping
+!        WRITE(88,*) "k=",k, "j=", j , "i=", i, "jj=", jj
+
+         if (i==j) then !diagonal
+            if (k==1.or.k==nlayi.or. k==nlayi+1.or. k== number) then
+                print*,k, i, j, jj,' 1'
+                write(88,*) i,j,jj,"1"
+            else
+                print*, k, i, j, jj,' 2 '
+                write(88,*)i,j,jj, "2"
+            end if
+
+            if (k/=1.and.k/=(nlayi+1)) then ! change off-diagonal entry n1layer_adpx values away, so in previous layer
+               print*, k, i, j, jj,jj-n1layer_adpx, '- 1 off diag' 
+                 write(88,*)i,j, jj-n1layer_adpx, "-1"    
+!                write(88,*)i-n1layer_adpx,j, "-1"
+            end if
+
+         end if
+
+      end do
+  end do
+  end do
+
+END PROGRAM testloop2

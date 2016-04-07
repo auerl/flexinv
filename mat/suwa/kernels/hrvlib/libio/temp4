@@ -1,0 +1,32 @@
+HOME=/home/columbus/hrvsrc
+PATH=/bin:/usr/bin:/opt/SUNWspro/bin:/usr/ucb:/etc:.:/opt/gnu/bin:/usr/ccs/bin:/usr/openwin/bin:/usr/local/bin:/home/columbus/hrvsrc/bin:/home/columbus/hrvsrc/etc:/home/columbus/hrvsrc/mscr/bin:/home/tempo/liu/bin:/home/tempo/ekstrom/bin
+LOGNAME=hrvsrc
+HZ=100
+TERM=sun-cmd
+TZ=US/Eastern
+SHELL=/bin/csh
+MAIL=/var/mail/hrvsrc
+PWD=/home/tempo/hrvsrc/src/libio
+USER=hrvsrc
+OPENWINHOME=/usr/openwin
+MYBIN=/home/columbus/hrvsrc/bin
+MYOBJ=/home/columbus/hrvsrc/obj
+MYLIB=/home/columbus/hrvsrc/lib
+GELIB=/home/columbus/ekstrom/lib
+MYETC=/home/columbus/hrvsrc/etc
+MANPATH=/usr/newsprint/man:/usr/lang/man:/usr/man
+LD_LIBRARY_PATH=/usr/openwin/lib:/opt/SUNWspro/lib
+HRVBIN=/home/columbus/hrvsrc/bin
+SAFBIN=/home/seismology/hrvsrc/bin
+HRVLIB=/home/columbus/hrvsrc/lib
+HRVOBJ=/home/columbus/hrvsrc/obj
+HRVDBS=/home/columbus/hrvsrc/dbs
+SEISM=/home/columbus/hrvsrc/dbs
+PFLAGSV=-L$(GKSDIR)/.. $(GELIB)/libplot0.a -lgks77 -lgks -lsuntool -lsunwindow -lpixrect -lm
+PFLAGOW=-L$(GKSHOME)/lib $(GELIB)/libplot0_ow.a -lgks77 -lxgl -lxview -lolgx -lX11 -lm
+PRINTER=lp
+EXINIT=se nu|se ai|se sw=1
+DISPLAY=charisma:0
+LANG=C
+WINDOW_TERMIOS=
+TERMCAP=sun-cmd:te=\E[>4h:ti=\E[>4l:tc=sun:

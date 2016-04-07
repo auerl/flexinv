@@ -1,0 +1,192 @@
+      subroutine spline_int(eqlat,eqlon,stlat,stlon,bslat,bslon,ngpt,
+     +	h,rknt,nknt,numsplit,isplbuf,tpath,rpath,nth)
+c
+c  Computes the contribution of a spline function over
+c  a ray path.
+c  Input:
+c	 rknt --- radial splines
+c	 nknt --- number of radial splines
+c	 bslat --- lat of horizontal splines
+c	 bslon --- lon horizontal splines
+c	 ngpt --- number of horizontal grid points
+c  Output:
+c 	 arow --- a row of A matrix 
+c 	 indarow --- index of non-zero elements of A 
+c
+      implicit double precision (a-h,o-z)
+      include "invparm.h"
+c... A-matrix 
+      common/partvel/pathder(5,3200),pathvel(5,3200)
+      common/amatrix/arow(maxparm),indarow(maxparm),nonzero_a
+      common/invopt/numinvvar,invparlist(5)
+      common/radcontrib/qseg(5,3200),arowk(5,maxrknot)
+      dimension qrad(3,3200), fwork(3,3200)
+c      dimension qspder1(3,3200), qspder2(3,3200)
+c      dimension qspder3(3,3200), qspder4(3,3200)
+      dimension bslat(1), bslon(1)
+      dimension isplbuf(1)
+      dimension rknt(maxrknot)
+      dimension transmat(9)
+      dimension tpath(1), rpath(1)
+c--- save the segment of path that a spline contributes to----
+c---
+      dimension rseg(3200), qseg(5,3200), thseg(3200)
+c-------------------------------------------------------------
+      dimension arowk_lm(maxrknot), arowk_um(maxrknot)
+
+      hpi=pi*0.5d0
+      twoh=2.d0*h
+      twohsq=twoh*twoh
+
+      call conv2geocen(eqlat, eqlon, eqtheta, eqphi)
+      call conv2geocen(stlat, stlon, sttheta, stphi)
+      del = dist(eqtheta, eqphi, sttheta, stphi)
+	do i=1, nth
+		write(333,*) tpath(i)*reprad, rpath(i)
+		write(62, *) tpath(i)*reprad, pathder(3,i)
+		write(72, *)tpath(i)*reprad, pathder(4,i)
+	enddo
+      call calc_fwdtransmat(eqtheta, eqphi, sttheta, stphi, transmat)
+c
+c... cubic spline interpolation of radius
+c
+      call drspln(1, nth, theta_path, rad_path, qrad, fwork)  ! cubic spline
+
+      do i=1, ngpt
+        call conv2geocen(bslat(i), bslon(i), sptheta, spphi)
+c... transform spline location to source--receiver coordinates
+        call transform(sptheta, spphi, transmat, spth1, spph1)
+c		print*, bslat(i), bslon(i), sptheta, spphi, spth1, spph1
+c
+c... check if spline is within 2*h of equator.
+	if(abs(spth1-hpi).le.twoh) then
+	   aa=hpi-spth1
+	   bb=sqrt(twohsq-aa*aa)	! distance from center of bell
+	   xmin=spph1-bb 		! boundaries of the bell
+	   xmax=spph1+bb 
+	   if(xmax.gt.twopi) then
+	   	xmax=xmax-twopi
+	   	xmin=xmin-twopi
+	   endif
+	   mode=1
+	   if(ifbetween(0.d0,xmin,del).ne.0.and.ifbetween(0.d0,xmax,del).ne.0) then
+c... path passes bell
+	   	ii0=-1
+	   	ii1=-1
+	   else if(ifbetween(0.d0,xmin,del).ne.0.and.xmax.gt.del) then
+c... path ends in bell
+	   	xmax=del
+	   	ii0=-1
+	   	ii1=nth
+	   else if(ifbetween(0.d0,xmax,del).ne.0.and.xmin.lt.0) then
+c... path begins in bell
+	    	xmin=0.d0
+	   	ii0=1
+	   	ii1=-1
+	   else if(ifbetween(xmin,0.d0,xmax).ne.0.and.ifbetween(xmin,del,xmax).ne.0) then
+c... path all in bell
+	   	xmin=0.d0
+	   	xmax=del
+	   	ii0=1
+	   	ii1=nth
+	   else
+	   	mode=0
+	   endif
+c
+c ... below finds beginning and ending limits and 
+c ... integrate radially
+c
+           if(mode.ne.0) then
+c...below saves index of point at xmin, lower limit
+	   	if(ii0.lt.0) then
+			do j=1,nth
+			   if(tpath(j).ge.xmin) goto 10
+			enddo
+10			ii0=j
+	   	endif
+c...below saves index of point at xmax, upper limit
+	   	if(ii1.lt.0) then
+			do j=nth,1,-1
+			   if(tpath(j).le.xmax) goto 20
+			enddo
+20	  		ii1=j
+	   	endif
+
+c
+c for testing of travel time only!!!
+c
+		ii0=2
+		ii1=nth-1
+		xmin=tpath(ii0)
+		xmax=tpath(ii1)
+c------------------------------------------------------------------------------------
+		print*, ii0, ii1
+		indseg=0	! begin the array between xmin and xmax with index 1
+c
+c... account for the extra point (xmin) at the beginning-----------------------------------------
+c
+	      	if(ii0.ne.1) then
+			indseg=indseg+1		! add one more point to account for xmin
+			call xlinearint(xmin,tpath(ii0-1),tpath(ii0),
+     &				rpath(ii0-1),rpath(ii0),rr)
+			print*, xmin,tpath(ii0-1),tpath(ii0),
+     &				rpath(ii0-1),rpath(ii0),rr
+			thseg(indseg)=xmin
+			rseg(indseg)=rr
+			do ipar=1, 5
+				call xlinearint(xmin,tpath(ii0-1),tpath(ii0),
+     &					pathder(ipar,ii0-1),pathder(ipar,ii0),xxx)
+				qseg(ipar,indseg)=xxx
+			enddo
+	  	endif
+c
+c... copy the segment of the ray to the appropriate arrays-----------------------------
+c
+		do j=0, ii1-ii0
+			indseg=indseg+1
+			ind0=j+ii0
+			rseg(indseg)=rpath(ind0)
+			thseg(indseg)=tpath(ind0)
+			do ipar=1, 5
+				qseg(ipar,indseg)=pathder(ipar,ind0)
+			enddo
+		enddo
+c---account for the extra point at the end---xmax---------------------------------------
+	   	if(ii1.ne.nth) then
+			indseg=indseg+1
+			call xlinearint(xmax,tpath(ii1),tpath(ii1+1),
+     &				rpath(ii1),rpath(ii1+1), rr)
+			rseg(indseg)=rr
+			rseg(indseg+1)=rr	! duplicate used for interpolation later
+c			print*, xmax, tpath(ii1),tpath(ii1+1), rpath(ii1),rpath(ii1+1), rr
+			thseg(indseg)=xmax
+			thseg(indseg+1)=xmax
+			do ipar=1, 5
+				call xlinearint(xmax,tpath(ii1),tpath(ii1+1),
+     &					pathder(ipar,ii1),pathder(ipar,ii1+1),xxx)
+				qseg(ipar,indseg)=xxx
+				qseg(ipar,indseg+1)=xxx
+			enddo
+	   	endif
+		nseg=indseg
+c---------------------------------------------------------------------------------------
+	do kjkk=1, 2
+		print*, kjkk, qseg(3,kjkk), qseg(4,kjkk)
+	enddo
+	do kjkk=1, nseg
+		write(4343,*) kjkk, qseg(4,kjkk)
+		write(2222,*) thseg(kjkk)*reprad, rseg(kjkk)
+
+	enddo
+		
+	   	call radcontribute(spth1,spph1,h,thseg,rseg,nseg,rknt,nknt)
+	   	ind=1
+c	   	do k=1, nknt
+c			arow(ind+i)=arowk(k)
+c			ind=ind+gpt
+c	   	enddo
+	   endif
+	 endif
+      enddo
+      return
+      end

@@ -1,0 +1,77 @@
+!=======================================================================
+!
+!       code from Lapo Boschi, 2/2009
+!       
+!       $Id: readmatrix.f,v 1.4 2009/02/28 04:09:43 becker Exp $
+!
+!       changed to f90 to use module, Julia Schaefer, 10.07.09
+!
+!       readmatrix version as used for lsqr_vx.f, inv_adpx_main.f90
+!
+!s
+SUBROUTINE readmatrix(info)
+  USE inv_adpx_module
+  IMPLICIT NONE
+! ndata,NAMEXXX,NAMEIND,NAMEPOI,NAMERHS,MPOIN,T,INDX,ITCOUNT,VALUES,ICOL,JJ,NONZ,N,M,relwei,ritcount,nmax
+!      dimension t(m),itcount(nmax),ritcount(nmax)
+!      dimension indx(nonz),values(nonz),mpoin(0:m)
+!      CHARACTER*80 NAMEXXX,NAMEPOI,NAMEIND,NAMERHS
+      INTEGER,INTENT(OUT)     :: info
+      INTEGER                 :: nrec0, icol0, nrec, mptemp 
+
+      info=1
+
+      print*,'opening files ',NAMEXXX,NAMEIND,NAMEPOI,NAMERHS
+!--read in the matrix
+      OPEN(1,FILE=namexxx,status='old',access='direct',recl=4,form='unformatted')
+      OPEN(4,FILE=nameind,status='old',access='direct',recl=4,form='unformatted')
+      OPEN(3,FILE=namepoi,status='old')
+      open(77,file=namerhs,status='old')
+
+      print*,'start from',icol,jj                     ! jj: # matrix-element, icol: number rhs-value
+      print*,'weight=',relwei
+
+      icol0=icol-1
+      nrec0=1
+
+      do icol=icol0+1,icol0+ndata
+        read(3,*,err=153)mptemp                       ! mptemp: pointer, #values/row, as many as pixel crossed
+        mpoin(icol)=mptemp+mpoin(icol0)               ! mpoin: actual value
+!TEST
+!       print*,icol,mpoin(icol)
+        read(77,*,err=154)t(icol)                     ! t: data (rhs)
+!--assign weight to rhs:
+        t(icol)=t(icol)*relwei
+        do nrec=nrec0,mpoin(icol)
+          read(4,rec=nrec)indx(jj)                    ! index in row = index of corresponding pixel
+          read(1,rec=nrec)values(jj)                  ! values: raypath through this pixel
+            htc(indx(jj))=htc(indx(jj))+1     ! itcount: add to hitcount value
+            values(jj)=values(jj)*relwei
+!TEST 
+!     print*,jj,indx(jj),values(jj)
+            jj=jj+1
+        enddo
+        nrec0=mpoin(icol)+1
+!TEST
+!       pause
+        if(mod(icol,10000).eq.0)print*,icol," rows read"
+      enddo
+
+      print*,'total number of data so far=',icol
+      print*,"total number of nonzero entries=",jj-1
+      close(1)
+      close(4)
+      close(3)
+      close(77)
+
+      info=0
+      return
+
+153   print*,"error while reading pointer", icol,icol0,ndata,mptemp
+      stop
+154   print*,"error while reading data vector"
+
+
+
+END SUBROUTINE
+

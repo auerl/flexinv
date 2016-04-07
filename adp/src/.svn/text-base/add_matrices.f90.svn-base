@@ -1,0 +1,269 @@
+SUBROUTINE ADD_MATRICES
+
+ !*********************************************************************!
+ !
+ !    J. Schaefer 09/2009
+ !    
+ !
+ !*********************************************************************!
+
+  USE inv_adpx_module
+  IMPLICIT NONE
+  INTEGER                           :: natamax              ! dimensions of matrices 
+  INTEGER                           :: n,kk        
+  REAL                              :: rdamp                ! actual value of roughness damping operator
+  INTEGER                           :: number    !
+  REAL,DIMENSION(:,:),ALLOCATABLE   :: rdampop              !roughness damping operator for 1 layer 
+  INTEGER                           :: ktriangle,k,krow
+  REAL                              :: t1,t2,t3,t4,t5,t6
+  INTEGER                           :: cnt                  ! just to test if loop works correctly
+  INTEGER                           :: i2, j2  
+  number=npar*nlayi
+
+  call CPU_TIME(t1)
+
+ !====================================================================!
+ ! calculate norm damping 
+  allocate(ndampvec(n1layer_adpx))
+
+  if (damp/=0) then
+      call normdampop_ctc
+  else
+      ndampvec=0
+  end if
+  
+ !====================================================================!
+ ! allocate space
+
+  natamax=npar_adpx*(npar_adpx+1)               ! calculate number of values in upper triangular of ata
+  natamax= natamax/2                            
+
+  print*,npar_adpx, natamax
+  write(82,*) "number of parameters in adaptive grid:", npar_adpx
+  write(82,*) "number of entries in upper triangular of ata:", natamax
+  write(82,*) "n1layer_adpx=", n1layer_adpx, "number=", number
+  
+  allocate(atd(npar_adpx), rdampop(n1layer_adpx,n1layer_adpx), ata(natamax) )
+
+  if (packed.eq.'n'.or.packed.eq.'N') allocate(ata2(npar_adpx,npar_adpx))
+
+ !====================================================================!
+ ! read the matrix 
+
+  open(32,file=trim(nameatd),access='direct',recl=4*npar_adpx,form='unformatted')
+
+  write(82,*) 'start reading atd' 
+  read(32,rec=1) (atd(i),i=1,npar_adpx) 
+  call CPU_TIME(t2)
+  print*, "time for reading atd", t2-t1
+  write(82,*)"time for reading atd", t2-t1
+  
+
+  write(82,*) 'start reading ata' 
+  
+  open(31,file=trim(nameata),access='direct',recl=4*natamax,form='unformatted')  
+  read(31,rec=1) (ata(i),i=1,natamax) 
+  
+  
+
+  call CPU_TIME(t3)
+  print*, "time for reading ata", t3-t2
+  write(82,*) "time for reading ata", t3-t2
+
+  close(31)
+  close(32)
+  
+  
+ !====================================================================!
+ ! read the horizontal roughness damping 
+
+  cnt=0
+  open(33,file=trim(namerdamp))
+  rdampop=0
+  
+  write(82,*) 'factor for roughness damping:', wgrad(1), wgradv(1), n1layer_adpx
+  write(82,*) 'factor for norm damping:', damp
+
+  do j=1,n1layer_adpx
+!  write(82,*) j
+    do i=1,j
+!  write(82,*) i
+      cnt=cnt+1
+      read(33,*) rdamp 
+      if (cnt<10) write(82,*) i,j,rdamp
+      rdamp= wgrad(1)*rdamp
+      if (cnt<10) write(82,*) i,j,rdamp
+      rdampop(i,j)=rdamp
+      rdampop(j,i)=rdamp
+    end do
+  end do
+  close(33)
+
+  call CPU_TIME(t4)
+  print*, "time for reading roughdampop", t4-t3
+  write(82,*) "time for reading roughdampop", t4-t3
+
+
+
+ !====================================================================!
+ ! The roughness damping operator is just determined for one layer, since
+ ! it is the same for all layers. 
+ ! Now for each value of ata  the according indexes 
+ ! (row i and column j) of the roughness damping operator have to be determined.
+
+ jj=0
+
+  do k=1,number
+  do j=1,n1layer_adpx !column, matrix index for one layer
+     j2=j+(k-1)*n1layer_adpx !column, matrix index for whole matrix
+     jj=jj+n1layer_adpx*(k-1)
+
+      do i=1,j    !triangle, row
+         i2=i+(k-1)*n1layer_adpx !row, matrix index for whole matrix        
+         jj=jj+1
+           ata(jj)=ata(jj) + rdampop(i,j) 
+!         if (jj<5) write(82,*) ata(jj), rdampop(i,j),i,j
+!           if (packed.eq.'y'.or.packed.eq.'Y') ata(jj)=ata(jj) + rdampop(i,j) 
+!           if (packed.eq.'n'.or.packed.eq.'N') ata2(i2,j2)= ata2(i2,j2) + rdampop(i,j) 
+         ! vertical roughness damping
+!         if (wgradv(1)>0) then
+
+         if (i==j) then !diagonal
+            if (k==1 .or. k==nlayi .or. k==nlayi+1 .or. k==number) then
+                 ata(jj)= ata(jj) + 1 * wgradv(1) + ndampvec(j) + anidamp
+!                if (packed.eq.'y'.or.packed.eq.'Y') ata(jj)= ata(jj) + 1 * wgradv(1) + ndampvec(j) + anidamp
+!                if (packed.eq.'n'.or.packed.eq.'N') ata2(i2,j2)= ata2(i2,j2) + 1 * wgradv(1) + ndampvec(j) + anidamp
+!                if(j<=2 ) write(82,*) k, i, j, jj,' 1' 
+            else
+                 ata(jj)= ata(jj) + 2 * wgradv(1) + ndampvec(j) + anidamp
+!                if (packed.eq.'y'.or.packed.eq.'Y') ata(jj)= ata(jj) + 2 * wgradv(1) + ndampvec(j) + anidamp
+!                if (packed.eq.'n'.or.packed.eq.'N')  ata2(i2,j2)= ata2(i2,j2) + 2 * wgradv(1) + ndampvec(j) + anidamp               
+!                if(j<=2 ) write(82,*) k, i, j, jj,' 2' 
+            end if
+
+            if (k/=1 .and. k/=(nlayi+1)) then ! change off-diagonal entry n1layer_adpx values away, so in previous layer
+                 ata(jj-n1layer_adpx)= ata(jj-n1layer_adpx) - (1 * wgradv(1) )
+!                if (packed.eq.'y'.or.packed.eq.'Y') ata(jj-n1layer_adpx)= ata(jj-n1layer_adpx) - (1 * wgradv(1) )
+!                if (packed.eq.'n'.or.packed.eq.'N')  ata2(i2-n1layer_adpx,j2)= ata2(i2-n1layer_adpx,j2)  - (1 * wgradv(1) )
+!                if(j<=2 ) write(82,*)  k, i, j, jj,jj-n1layer_adpx, '- 1 off diag' 
+            end if
+
+		if (k>nlayi)  then
+		    ata(jj-npx_adpx)=  ata(jj-npx_adpx) - anidamp !off-diagonal entry of anisotropy damping
+!		    if (packed.eq.'y'.or.packed.eq.'Y') ata(jj-npx_adpx)=  ata(jj-npx_adpx) - anidamp !off-diagonal entry of anisotropy damping
+!		    if (packed.eq.'n'.or.packed.eq.'N') ata2(i2-npx_adpx,j2)=  ata2(i2-npx_adpx,j2) - anidamp
+            end if
+     !       if (k==nlayi+1) print*, jj, jj-npx_adpx            
+            
+            
+         end if 
+            
+
+            
+!         if (jj<5) write(82,*) ata(jj), rdampop(i,j),i,j
+
+      end do
+  end do
+  end do
+
+
+  call CPU_TIME(t5)
+  print*, "time for adding roughness damping", t5-t4
+  write(82,*) "time for adding roughness damping", t5-t4
+
+  print*, jj,natamax
+  if (jj/=natamax) stop "error in add_matrices"
+
+
+
+!************************************************************
+
+!   jj=0
+!   do j=1,npar_adpx 
+!   do i=1,j
+!      jj=jj+1
+!      
+!      if (i==j) then
+! 	  ata(jj)=ata(jj)+10000000
+!      end if
+! 
+!   end do
+!   end do
+! 
+!   jj=0
+!   do j=1,npar_adpx 
+!   do i=1,j
+!      jj=jj+1
+!      
+!      if (i==j) then
+! 	  ata(jj)=ata(jj)+10000000000
+!      end if
+! 
+!   end do
+!   end do
+! 
+
+
+!************************************************************
+
+  if (packed.eq.'n'.or.packed.eq.'N') then
+
+!***********************************
+!row number(j):           1 2 3  4
+! column number (i):      matrix element number (jj):
+!                     1   1 2 4  7 ...                     
+!                     2     3 5  8 ...              
+!                     3       6  9 ...             
+!                     4         10 ...             
+!                                  ...
+! 
+! 
+
+
+	jj=0
+	do j=1,npar_adpx !column
+	  do i=1,j    !triangle, row
+	  
+		jj=jj+1    
+		ata2(i,j)=ata(jj) 
+		ata2(j,i)=ata(jj)
+		
+	    enddo
+	enddo    
+	
+      print*,"changed format of ata", jj, natamax
+      write(82,*) "changed format of ata", jj, natamax
+      deallocate(ata)
+      
+!       open(31,file=trim(namexxx)//'.ad.ata',access='direct',recl=4,form='unformatted')
+!       jj=0
+!       do j=1,npar_adpx !column
+! 	do i=1,j    ! row
+! 	    jj=jj+1	
+!           read(31,rec=jj) ata2(i,j) !read one column at once
+! 	enddo
+!       enddo    
+!       
+!       if(jj/=natamax) then
+!           print*, "problem with reading ata. jj=", jj
+!           write(82,*)  "problem with reading ata. jj=", jj
+! 	    stop
+!       end if      
+      
+!       do j=1,npar_adpx !column
+! 	do i=1,j    ! row
+!          ata(j,i)= ata(i,j) 
+!       enddo
+!       enddo  
+  
+  end if
+
+
+
+
+  !deallocate(ata, atd)
+  deallocate(ndampvec)
+  info=0
+  return
+
+END SUBROUTINE ADD_MATRICES

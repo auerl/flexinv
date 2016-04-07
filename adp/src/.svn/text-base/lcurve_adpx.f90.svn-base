@@ -1,0 +1,418 @@
+PROGRAM LCURVE_ADPX
+
+ !*********************************************************************!
+ !
+ !    J. Schaefer 06/2010
+ !    
+ ! Calculates the roughness of the model by multiplying the roughness-operator with 
+ ! the model-values and determining the norm of the resulting vector and the misfit of the model. 
+ ! Used lcurve_data_all2gether.f90 as example, but added an other dimension due to 3D, now roughness of all layers.
+ !
+ !
+ !*********************************************************************!
+
+
+  IMPLICIT NONE
+  REAL              				:: t1,t2,t3,t4,t5,t6
+  REAL,ALLOCATABLE,DIMENSION(:,:,:) 	:: model, results
+  REAL,ALLOCATABLE,DIMENSION(:,:) 		:: model2
+  REAL*8, ALLOCATABLE,DIMENSION(:) 		:: roughdamp
+  REAL*4, ALLOCATABLE,DIMENSION(:) 		:: norm,norm2
+  INTEGER,PARAMETER				:: sh=810000
+  CHARACTER*120					:: dampingvalues 		! file contains coefficients for roughness damping and model file name
+  CHARACTER*120					:: output
+  CHARACTER*120      				:: bfile			! root of files for roughness damping
+  CHARACTER*200      				:: mfile1,mfile2		! file with model values
+  CHARACTER*120      				:: namenumberadpx
+  INTEGER           				:: pixi,numb,modeli,layi,bla,bla1,bla2,j,npar,jj,pari,k
+  INTEGER, ALLOCATABLE,DIMENSION(:) 	:: rhdamp, rvdamp 	! coefficients for horizontal and vertical roughness damping
+  CHARACTER*120					:: check
+  CHARACTER(LEN=6)				:: pxnumchar
+  INTEGER						:: n1layer_adpx, nlayi,info
+  REAL						:: denom
+  REAL, ALLOCATABLE,DIMENSION(:) 		:: t				! data vector
+  INTEGER						:: m 				! number of data
+  INTEGER						:: mpoin_now, mpoin_row, mpoin_old
+  CHARACTER*120					:: namexxx,namepoi,nameind,namerhs 	! matrix-files
+  REAL, ALLOCATABLE,DIMENSION(:) 		:: varred,rnumer,tot			! variance reduction
+  INTEGER						:: icol,nrec
+  REAL, ALLOCATABLE,DIMENSION(:) 		:: values
+  INTEGER*4, ALLOCATABLE,DIMENSION(:) 	:: indx
+
+
+  !====================================================================!
+  ! file to check progress, information about matrix
+  !====================================================================!
+
+   print*,"file for progress protocol?"
+   read*,check
+   open(82,file=trim(check))
+   print*,"number of layers?"
+   read*,nlayi
+   print*,nlayi
+   print*,"number of parameters?"
+   read*,npar
+   read*,namenumberadpx
+   read*,namexxx
+   read*,nameind
+   read*,namepoi
+   read*,namerhs
+   read*,m
+
+
+  !====================================================================!
+  ! information for lcurve
+  !====================================================================!
+
+   print*,"file with spherical harmonic coefficients?"
+   read*,bfile
+   print*, "list with roughness damping values?"
+   read*, dampingvalues
+   print*, "output file?"
+   read*, output
+   print*, "number of models?"
+   read*, numb
+
+
+  !====================================================================!
+  ! get some info about parameterisation
+  !====================================================================!
+
+   open(8,file=trim(namenumberadpx))
+   read(8,*) n1layer_adpx, bla 
+   print*, n1layer_adpx, "pixels per layer"
+
+   call CPU_TIME(t1)
+
+
+ !======================================================================!
+ ! define horizontal roughness
+ !
+ ! used loops:
+ ! modeli=1,numb 			: different models
+ ! pixi=1,n1layer_adpx		: pixels
+ ! layi=1,nlayi			: different layer
+ ! j=1,sh (n1layer_adpx)	: spherical harmonic coefficients (#pixels in case of vertical damping)
+ !======================================================================!
+
+
+ !======================================================================!
+ ! allocate space
+
+   allocate(model(n1layer_adpx,numb,nlayi*npar),results(sh,numb,nlayi*npar),norm(numb) )
+   allocate(rhdamp(numb),rvdamp(numb))
+
+   results=0.	
+
+
+ !======================================================================!
+ ! reading all model values
+
+   open(9,file=trim(dampingvalues)) 
+   do modeli=1,numb
+     read(9,*) rhdamp(modeli), rvdamp(modeli), mfile1, mfile2
+! !    print*, "reading model from file", mfile1, "and", mfile2
+     print*, "coefficient for horizontal roughness damping: ",rhdamp(modeli)
+     print*, "coefficient for vertical roughness damping: ", rvdamp(modeli)
+     open(10,file=trim(mfile1))
+     open(11,file=trim(mfile2))
+     do layi=1,nlayi
+     do pixi=1,n1layer_adpx
+	  read(10,*)bla1, model(pixi,modeli,layi)
+	  read(11,*)bla2, model(pixi,modeli,layi+nlayi)
+	  if (bla1/=pixi+n1layer_adpx*(layi-1)) stop "check reading 10"
+        if (bla2/=pixi+n1layer_adpx*(layi-1)+n1layer_adpx*nlayi) stop "check reading 11"
+     end do
+     end do
+     close(10)
+     close(11)
+   end do
+   close(9)
+
+   allocate(model2(n1layer_adpx*nlayi*npar,numb))
+   open(9,file=trim(dampingvalues)) 
+
+
+   do modeli=1,numb
+   jj=0
+     read(9,*) rhdamp(modeli), rvdamp(modeli), mfile1, mfile2
+ !    print*, "reading model from file", mfile1, "and", mfile2
+!    print*, "coefficient for horizontal roughness damping: ",rhdamp(modeli)
+ !    print*, "coefficient for vertical roughness damping: ", rvdamp(modeli)
+     open(10,file=trim(mfile1))
+     open(11,file=trim(mfile2))
+    do jj=1,n1layer_adpx*nlayi
+	!jj=jj+1
+	  read(10,*)bla1, model2(jj,modeli)
+	  read(11,*)bla2, model2(jj+n1layer_adpx*nlayi,modeli)
+   ! print*, jj, bla1, bla2, jj+n1layer_adpx*nlayi
+    if(jj/=bla1) stop "problem1"
+    if(jj+n1layer_adpx*nlayi/=bla2) stop "problem2"
+  end do
+     close(10)
+     close(11)
+   end do
+   close(9)
+    
+   model=model/100
+   model2=model2/100
+
+  
+   call CPU_TIME(t2)
+   print*, "time to read model values: ", t2-t1
+   write(82,*)'time to read model values:', t2-t1
+
+ !======================================================================!
+ ! defining roughness
+ ! column pixi of the roughnessdamping matrix is multiplied with element pixi of the model-vector. 
+ ! With each iteration results are added to the privious ones to get the final roughness-vector.
+ ! Procedure is done for all layers layi to obtain the roughness of each layer.
+
+   allocate(roughdamp(sh))
+   do pixi=1,n1layer_adpx
+  
+     ! reading column of roughness damping matrix
+	write(pxnumchar,'(I6.6)') pixi
+	if (MOD(pixi,500)==0) print*, "processing column", pixi
+	open(11,file=trim(bfile)//pxnumchar,access='direct',recl=8*810000,form='unformatted',status='old')
+	read(11,rec=1)( roughdamp(j),j=1,810000)
+	close(11)
+	do layi=1,nlayi*npar   
+	do modeli=1,numb
+ 	   do j=1,sh
+		results(j,modeli,layi)   = results(j,modeli,layi) +  real(roughdamp(j)*model(pixi,modeli,layi) )
+	   end do !j
+	end do !modeli
+	end do !layi
+   end do !pixi
+   deallocate(roughdamp)
+
+
+ !======================================================================!
+ ! determining the norm of the roughness-vector, adding up values for different layers
+   norm=0.
+
+   do modeli=1,numb
+   do layi=1,nlayi*npar  
+   do j=1,sh
+	norm(modeli)=norm(modeli) + (results(j,modeli,layi))**2
+   end do	
+   end do
+   end do
+
+
+   do modeli=1,numb	
+     norm(modeli)=sqrt(norm(modeli))
+   end do
+
+   print*, "horizontal roughness=", norm(1:numb)
+   call CPU_TIME(t3)
+   print*, "time to define horizontal roughness: ", t3-t2
+   write(82,*)'time to define horizontal roughness:', t3-t2
+
+
+ !======================================================================!
+ ! define vertical roughness
+ ! modeli=1,numb 		: different models
+ ! pixi=1,n1layer_adpx	: pixels
+ ! layi=1,nlayi			: different layer
+ ! j=1,sh				: spherical harmonic coefficients
+ !======================================================================!
+
+ !======================================================================!
+ ! allocate space
+   deallocate(results)
+   allocate(results(n1layer_adpx,numb,nlayi*npar),norm2(numb) )
+
+   ! set results to 0
+   do modeli=1,numb
+   do layi=1, nlayi*npar
+   do pixi=1,n1layer_adpx
+	results(pixi,modeli,layi)=0
+   end do
+   end do
+   end do
+
+ !======================================================================!
+ ! determine vertical roughness
+
+   do modeli=1,numb
+   do pari=1,npar
+   do layi=1+((nlayi)*(pari-1)), (nlayi*pari)-1
+   do pixi=1,n1layer_adpx
+	! in results the columns layi*pari are always empty
+	results(pixi,modeli,layi)   =  model(pixi,modeli,layi) - model(pixi,modeli,layi+1)
+
+   end do
+   end do
+   end do
+   end do
+
+
+   !test
+   do modeli=1,numb
+   do pari=1,npar
+   do pixi=1,n1layer_adpx
+	!print*, pari, pixi,modeli, nlayi*pari, results(pixi,modeli,nlayi*pari)
+	if (results(pixi,modeli,nlayi*pari)/=0) stop "problem in vertical roughness damping"
+   end do
+   end do
+   end do
+
+
+ !======================================================================!
+ ! determining the norm of the roughness-vector, adding up values for different layers and parameters
+
+   ! set to 0 first
+   do modeli=1,numb
+	  norm2=0.
+   end do
+
+   do modeli=1,numb
+   do layi=1,nlayi*npar  
+   do pixi=1,n1layer_adpx
+	norm2(modeli)=norm2(modeli) + (results(pixi,modeli,layi))**2
+   end do	
+   end do
+   end do
+
+
+   do modeli=1,numb	
+     norm2(modeli)=sqrt(norm2(modeli))
+   end do
+
+   print*, "vertical roughness=", norm2(1:numb)
+   call CPU_TIME(t4)
+   print*, "time to define vertical roughness: ", t4-t3
+   write(82,*)'time to define vertical roughness:', t4-t3
+
+
+ !======================================================================!
+ ! define variance reduction
+ !======================================================================!
+
+ !======================================================================!
+ ! allocate space
+   allocate(varred(modeli))
+
+
+ !======================================================================!
+ ! write model in an a bit more convienient way for this case
+
+!    allocate(model2(n1layer_adpx*nlayi*npar,numb))
+! 
+!    do modeli=1,numb
+!    jj=0
+!    do layi=1,nlayi*npar
+!    do pixi=1,n1layer_adpx
+! 	jj=jj+1
+! 	model2(jj,modeli)=model(pixi,modeli,layi)
+!    end do
+!    end do
+!    end do
+!    deallocate(model)
+! 
+!    if (jj/=n1layer_adpx*nlayi*npar) stop "problem with changing format of model"
+!    print*, "changed format of model array"
+
+
+
+
+ !======================================================================!
+ ! read data vector
+
+  allocate (t(m),tot(numb),rnumer(numb), indx(n1layer_adpx*nlayi*npar), values(n1layer_adpx*nlayi*npar) )
+  print*, "space allocated"
+
+  denom=0.
+  open(3,file=trim(namerhs))
+  do icol=1,m
+     read(3,*,err=154)t(icol) 
+     denom=denom+(t(icol)*t(icol))
+  end do
+  close(3)
+  print*, "data read. denom=", denom
+
+
+  open(4,file=trim(namepoi))
+  mpoin_old=0
+  mpoin_row=0
+  k=0
+  rnumer=0.
+
+  print*, "read matrix and determine variance"
+
+  do icol=1,m !*******************************************************************************************
+ 	if (MOD(icol,100000)==0) print*, "processing datum", icol
+
+      ! pointer
+      read(4,*,err=153)mpoin_now                      ! #values/row, as many as pixel crossed
+      mpoin_row=mpoin_now - mpoin_old                  ! actual value
+
+     !====================================================================!
+     ! read row
+     OPEN(1,FILE=trim(namexxx),status='old',access='direct',recl=4,form='unformatted')
+     OPEN(2,FILE=trim(nameind),status='old',access='direct',recl=4,form='unformatted')
+
+      ! values, index
+      jj=0
+      tot=0.
+!  print*, "nrec:", mpoin_old+1, mpoin_now
+      do nrec=mpoin_old+1, mpoin_now
+          jj=jj+1
+          read(1,rec=nrec,err=156)values(jj)                  ! values: raypath through this pixel
+          read(2,rec=nrec,err=155)indx(jj)                    ! index in row = index of corresponding pixel
+
+!    print*,nrec,jj,values(jj),indx(jj)
+
+          do modeli=1,numb
+             tot(modeli)=tot(modeli) + values(jj) * model2(indx(jj),modeli)         !x(indx(ll)) 
+	    end do
+      enddo
+
+	do modeli=1,numb
+  !print*, modeli, rnumer(modeli), t(icol), tot(modeli)  !test
+	    rnumer(modeli)=rnumer(modeli)+(t(icol)-tot(modeli))**2
+	end do
+
+     mpoin_old = mpoin_now
+   end do
+
+   do modeli=1,numb
+	varred(modeli)=(rnumer(modeli)/denom)
+   end do
+
+!	write(*,*)"variance reduction=",1.-varred
+   print*, "rnumer", rnumer(1:numb)
+   print*, "variance reduction=",varred(1:numb)
+
+ !======================================================================!
+ ! write lcurve data
+ !======================================================================!
+   open(12,file=trim(output))
+   do modeli=1,numb
+	write(12,"(2I5,2F13.7,F10.7)") rhdamp(modeli), rvdamp(modeli), norm(modeli), norm2(modeli), varred(modeli)
+   end do
+   call CPU_TIME(t5)
+   print*, "time for all: ", t5-t1
+
+ !====================================================================!
+ ! error messages 
+  go to 11 
+9999 CONTINUE ! jump here upon error
+  IF (info .NE. 0) WRITE(*,*)'Controlled termination on error.'
+
+153   print*,"error while reading pointer", icol
+      stop
+154   print*,"error while reading data vector"
+      stop
+155   print*,"error while reading index",  icol, jj, nrec
+      stop
+156   print*,"error while reading value", icol, jj, nrec
+      stop
+
+
+11 continue
+
+
+END PROGRAM LCURVE_ADPX

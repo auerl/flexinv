@@ -1,0 +1,17 @@
+      FUNCTION FLDG(X)
+      INTEGER*4 IMANT,IEXP
+      DATA IMANT/Z'00FFFFFF'/,IEXP/Z'7F000000'/
+      LOGICAL BTEST
+      EQUIVALENCE (Y,I)
+      Y=X
+
+
+
+      FLDG=FLOAT(AND(I,IMANT))
+      IF(FLDG.NE.0.) THEN
+        IPOW=ISHFT(AND(IEXP,I),-24)-70
+        FLDG=(16.**IPOW)*FLDG
+        IF(BTEST(I,31)) FLDG=-FLDG
+      ENDIF
+      RETURN
+      END

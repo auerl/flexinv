@@ -1,0 +1,272 @@
+SUBROUTINE mapview_3d_adpx
+
+ !====================================================================!
+ !
+ !    J. Schaefer 07/2009
+ !
+ ! from a 3d mantle model stored in lapo's format, to a set of map-files (one per
+ ! model layer) in a format compatible with GMT command psxy
+ !
+ ! uses parameterization defined by param_adpx
+ ! use from module  : namegrid, nlay, rbot, rtop, name, average, n1layer_adpx,nlev,n1layer(nlev), imode
+ !
+ !====================================================================!
+
+  USE inv_adpx_module
+  IMPLICIT NONE
+  REAL,DIMENSION(nlay)        :: ave      ! vector with average values for all layers
+  INTEGER                     :: rincr    ! layer distance
+  CHARACTER(LEN=80)           :: string   ! just for reading the colorpalette 
+  REAL,DIMENSION(100)      	:: v        ! boundary values for colors
+  INTEGER,DIMENSION(100,3)    :: irgb     ! colorpalette 
+  INTEGER,DIMENSION(3)        :: rgb 
+  INTEGER                     :: nint, nend,nl
+  CHARACTER(LEN=11)           :: filename3
+  REAL                        :: zdepth   ! average depth of actual layer
+  INTEGER                     :: ila      ! loop over lateral zones
+  INTEGER                     :: rlong, rinlo,rlati                     ! number of pixel in this latitudinal zone and size
+  REAL                        :: xlomin, xlomax, xlamin, xlamax   ! coordinates of the pixel
+  INTEGER                     :: k
+  REAL                        :: ccc      ! value for pixel 
+  REAL                        :: a,b      ! color values
+  INTEGER                     :: isq, ipxnew
+
+  !====================================================================!
+  ! check if all necessary information available in the module
+  write(82,*) "informations used from the module:"
+  write(82,*) "# different size pixels:          	 ", nlev
+  write(82,*) "grid information: 				 ", namegrid
+  write(82,*) "# layers: 					 ", nlayi
+  write(82,*) "top and bottom layers: 			 ", rbot, rtop
+  write(82,*) "prepare printing for file: 		 ", name
+  write(82,*) "remove average y/n: 				 ", average
+  write(82,*) "# pixel/ layer in adaptive grid: 	 ", n1layer_adpx
+  write(82,*) "3 of pixels for different pixel sizes:  ", n1layer
+  write(82,*) "imode:						 ",imode
+
+
+  open(104,file=trim(namegrid)//".sh")
+  open(100,file=trim(namegrid))
+
+
+! set average for all layers to 0
+  do i=1,nlay
+     ave(i)=0.
+  enddo
+
+! layer spacing
+  rincr=(rtop-rbot)/nlay
+ print*, "rincr=",rincr
+
+ !====================================================================!
+ ! determine averages of all layers
+  if(imode.ne.4)then
+     open(1,file=trim(name),status='old')     
+     print*, "open file ", trim(name)   
+     if(average.eq.'y'.or.average.eq.'Y')then
+         print*, "calculate average"
+         call layav(nlay,ave,n1layer_adpx,rincr,nlev,n1layer(nlev))
+         print*, "...done"
+     endif
+  endif
+
+ !====================================================================!
+ ! read in discrete gmt color palette table 
+  if(imode.eq.1)then
+     open(unit=54,file=colorname,status='old')
+     i=1
+1    read(54,"(a80)",end=2)string
+     if((string(1:1).eq."#").or.(string(1:1).eq."B").or.(string(1:1).eq."F").or.(string(1:1).eq."N")) goto 1
+     read(string,*)v(i),(irgb(i,k),k=1,3),v(i+1),(irgb(i+1,k),k=1,3)
+     write(*,*)i,v(i),(irgb(i,k),k=1,3),v(i+1)
+     i=i+1
+     goto 1
+2    continue 
+  endif
+ !====================================================================!
+ ! open files for writing
+  nint=i-1
+  if(imode.eq.3)then
+     open(unit=3,file='valxyz.dat')
+     print *,'writing to valxyz.dat'
+  else if(imode.eq.4)then
+     open(unit=3,file='centxy.dat')
+     print *,'writing to centxy.dat'
+  endif
+
+  if(imode.eq.4)then 
+     nend = 1
+  else
+     nend = nlay
+  endif
+      
+!***************************   
+  do nl=1,nend
+
+      print*,"working on layer",nl, "number of pixel in layer:", n1layer_adpx
+
+     if(imode.lt.3)then
+        write(filename3,'(a6,i2.2,a2)')'layer_',nl
+        open(unit=3,file=filename3)
+     endif
+     
+     zdepth = rincr*(float(nl)-.5)
+
+!     do ila=1,nlatzones
+!        rlati=90.-(eq_incr*(ila-1))
+!        do isq=1,nsqrs(ila,nlev)
+!           rlong=(360./nsqrs(ila,nlev))*(isq-1)
+!           RINLO=(360./nsqrs(ila,nlev))
+!           xlomin=RLONG
+!           xlomax=RLONG+RINLO
+!           xlamax=RLATI
+!           xlamin=RLATI-eq_incr
+
+        do isq=1,n1layer_adpx
+
+           read(104,"(I7,4(1X,F10.3))")ipxnew,xlamin,xlamax,xlomin,xlomax
+
+           if(imode.ne.4)then
+!       read value and remove mean
+              read(1,*)k,ccc
+              ccc=(ccc-ave(nl))
+           endif
+           
+           if (nl<3) WRITE(77,*) nl, isq, ipxnew, ccc
+           
+           if(imode.eq.1)then
+!       determine color
+              do j=1,nint
+                 if((ccc.ge.v(j)).and.(ccc.le.v(j+1)))then
+!               interpolation of color
+                  do k=1,3
+                     a=(irgb(j,k)-irgb(j+1,k))/(v(j)-v(j+1))
+                     b=irgb(j,k)-(a*v(j))
+                       
+!     print*,k,a,b,ccc,rgb(k)
+                                          
+                     rgb(k)=a*ccc+b
+!---------------------------------------no interpolation of colours
+!       rgb(k)=irgb(j,k)
+                  enddo
+                    
+!     print*,isq,j,v(j),ccc,v(j+1),rgb(1),rgb(2),rgb(3)
+!     pause
+                    
+                 endif
+              enddo
+              if(ccc.ge.v(nint+1))then
+                do k=1,3
+                  rgb(k)=irgb(nint+1,k)
+                enddo
+              endif
+              
+              if(ccc.le.v(1))then
+                do k=1,3
+                  rgb(k)=irgb(1,k)
+                enddo
+                
+              endif
+!       print*,ccc,rgb(1),rgb(2),rgb(3)
+40            write(3,421)'> -G',rgb(1),'/',rgb(2),'/',rgb(3)
+              write(3,*)xlomin,xlamin
+              write(3,*)xlomin,xlamax
+              write(3,*)xlomax,xlamax
+              write(3,*)xlomax,xlamin
+              
+           else if(imode.eq.2)then
+           
+!       output of values only
+              write(3,*)(xlomin+xlomax)/2.,(xlamin+xlamax)/2.,ccc
+           else if(imode.eq.3)then
+!       x y z val
+              write(3,*)(xlomin+xlomax)/2.,(xlamin+xlamax)/2.,zdepth,ccc
+           else if(imode.eq.4)then
+!       x y locations only
+              write(3,*)(xlomin+xlomax)/2.,(xlamin+xlamax)/2.
+                
+           endif
+         
+         enddo
+!       enddo
+
+
+       if(imode.lt.3)then
+          close(3)
+       endif
+      rewind(104)
+!       close(104)   
+
+    enddo
+!***************************    
+    
+    if(imode.ge.3)then
+       close(3)
+    endif
+    if(imode.ne.4)then
+       close(1)
+    endif
+421 format(a4,i3.3,a1,i3.3,a1,i3.3)
+
+
+
+
+
+  go to 11 
+9999 CONTINUE ! jump here upon error
+  IF (info .NE. 0) WRITE(*,*)'Controlled termination on error.'
+
+11 continue
+
+  info=0
+END SUBROUTINE mapview_3d_adpx
+
+
+!**********************************************************************!
+!     SUBROUTINES
+!**********************************************************************!
+
+	subroutine layav(nlay,ave,n1layer,rincr,nlev,n1layerfine)
+	dimension ave(nlay)
+      integer ibla, ipxnew,lev, weight,nlev,n1layerfine,rincr
+	open(17,file="vprofile.txt")
+	open(18,file="dvprofile.txt")
+      print*, "++++++++++++++"
+
+!	rincr=(rtop-rbot)/nlay
+  print*, rincr !, rtop, rbot
+	do l=1,nlay
+	   tot=0.
+	   tot2=0.
+         icheck2=0
+	   do i=1,n1layer
+	      read(1,*)ii,value
+            read(100,"(4I15)")ibla,lev,ipxnew,ibla
+            if(ipxnew/=i)stop "layav has a problem!" 
+            weight= 2**(2*(nlev-lev))
+	      tot=tot+value*weight
+	      tot2=tot2+(value**2)*weight
+!	      icheck=(n1layer*(l-1))+i
+!	      if(ii.ne.icheck)stop "check check"
+            icheck2=icheck2+weight
+	   enddo
+         rewind(100)
+!	   std = sqrt ((n1layer * tot2 - tot**2) / ((n1layer*(n1layer-1))));
+         if(n1layerfine.ne.icheck2)stop "layav has a problem with weighting!"  
+	   ave(l)=tot/float(n1layerfine)
+!       
+         print*, rincr, rincr*l
+	   print*,'a: ',ave(l),(rincr*(float(l)-.5)),rincr*(l-1),rincr*(l),std
+	   write(17,*)">"
+	   write(17,*)rincr*(l-1),ave(l)
+	   write(17,*)rincr*(l),ave(l)
+!	   write(18,*)">"
+!	   write(18,*)rincr*float(l-1),std
+!	   write(18,*)rincr*float(l),std
+	enddo
+	close(17)
+!	close(18)
+	print*,'I computed all the ',nlay,' averages'
+	rewind(1)
+	return
+	end

@@ -1,0 +1,43 @@
+PROGRAM normalize
+! normalizes the roughness values for the l-curve, determined by lcurve_adpx.f90
+! Julia 10.06.10
+
+   implicit none
+   character*180				:: file 
+   real,dimension(:),allocatable	:: norm, norm2, varred
+   integer,dimension(:),allocatable	:: rhdamp, rvdamp
+   integer					:: i, imax
+   real					:: maxnorm, maxnorm2
+
+   print*, "input file?"
+   read*, file
+   print*, "number of values?"
+   read*, imax
+
+
+   allocate(rhdamp(imax), rvdamp(imax), norm(imax), norm2(imax), varred(imax))
+
+! read values
+   open (11, file=trim(file))
+   do i=1,imax
+      read(11,"(2I5,2F13.7,F10.7)") rhdamp(i), rvdamp(i), norm(i), norm2(i), varred(i)
+   	print*, i,rhdamp(i), rvdamp(i), norm(i), norm2(i), varred(i)
+   end do
+   close (11)
+
+   maxnorm=maxval(norm)
+   maxnorm2=maxval(norm2)
+
+! noralize them and write them in a new file
+   open (12, file=trim(file)//".nrmlz",status='new')
+   do i=1,imax
+      norm(i)=norm(i)/maxnorm
+      norm2(i)=norm2(i)/maxnorm2
+      print*, i, rhdamp(i), rvdamp(i), norm(i), norm2(i), varred(i)
+	write(12,"(2I5,3F10.7)") rhdamp(i), rvdamp(i), norm(i), norm2(i), varred(i)
+   end do
+
+
+
+ 
+END PROGRAM normalize

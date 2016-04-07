@@ -1,0 +1,125 @@
+!SUBROUTINE CHOLESKY
+subroutine cholchol
+
+ !*********************************************************************!
+ !
+ !    J. Schaefer 10/2009
+ !    
+ ! sppsv (netlib.org) 
+ ! computes the solution of a system of linear equations using cholesky factorisation
+ !
+ !*********************************************************************!
+
+  USE inv_adpx_module
+  IMPLICIT NONE
+  INTEGER               :: indic,kpa,kpan1, kpan2
+  CHARACTER(LEN=80)     :: nomfil
+  CHARACTER(LEN=15)     :: nomi
+  REAL                  :: result
+  CHARACTER(LEN=6)      :: rhdamp, rvdamp
+  CHARACTER(LEN=6)      :: ndamp
+  REAL                  :: tmp
+
+
+  REAL,DIMENSION(:,:),ALLOCATABLE     :: ata2
+  allocate(ata2(npar_adpx,npar_adpx))
+  
+  
+  
+  print*,"Lapack-Cholesky matrix inversion..."
+  write(82,*) "Lapack-Cholesky matrix inversion..."
+
+<<<<<<< .mine
+
+  call SPPSV( 'U', npar_adpx,1, ata, atd, npar_adpx, INFO )
+=======
+!   call SPPSV( 'U', npar_adpx,1, ata, atd, npar_adpx, INFO )
+! 
+! !--check if error
+!   if(info.ne.0)then
+!      print*,"fatal error in main, ill conditioned matrix ata at element= ", info    
+!      print*, ata(info-1), ata(info), ata(info+1) 
+!      write(82,*)  "fatal error in main, ill conditioned matrix ata at element= ", info    
+!      write(82,*) ata(info-1), ata(info), ata(info+1) 
+!      stop
+!   else
+!      print*,"cholesky-factorisation OK"   
+!      write(82,*) "cholesky-factorisation OK"   
+!   endif
+>>>>>>> .r20
+
+
+
+
+!******************************************
+
+!LDA,LDB:leading dimension of the matrix
+!N: dimension of matrix
+!nrhs: number of columns of solution B, here 1
+
+  jj=0
+  do j=1,npar_adpx !column
+     do i=1,j    !triangle, row
+     
+         jj=jj+1    
+         ata2(i,j)=ata(jj) 
+         ata2(j,i)=ata(jj)
+         
+      enddo
+  enddo    
+
+  call SPOSV( 'U', npar_adpx,1, ata2, npar_adpx, atd, npar_adpx, INFO )
+
+!--check if error
+  if(info.ne.0)then
+     print*,"fatal error in main, ill conditioned matrix ata at element= ", info    
+  else
+     print*,"cholesky-factorisation OK"   
+     write(82,*) "cholesky-factorisation OK"   
+  endif
+  
+!******************************************
+
+
+
+
+
+
+
+! write
+!   nomi='vshvsv'
+!   do kpa=1,npar
+!      kpan1=3*(kpa-1)+1
+!      kpan2=kpan1+2
+!      tmp=wgrad(1)
+!      write(82,*) "damping:", wgradv(1), wgrad(1)
+!      write(rhdamp,'(I6.6)') tmp
+!      write(82,*)"rhdamp:", rhdamp, tmp
+!      tmp= wgradv(1)
+!      write(rvdamp,'(I6.6)') tmp
+!      write(82,*)"rvdamp:", rvdamp, tmp
+!      write(ndamp,'(I6.6)') damp
+!      write(82,*)"ndamp:", ndamp, damp
+!      nomfil='delta'//nomi(kpan1:kpan2)//'.rhdamp'//rhdamp//'.rvdamp'//rvdamp//'.ndamp'//ndamp//'.dat'
+     write(82,*)"write results in file"
+     open(1,file='deltavsh.'//trim(name))
+     open(2,file='deltavsv.'//trim(name))
+     open(3,file='ani.'//trim(name))   
+  do jj=1,npx_adpx
+!      indic=jj+(npx_adpx*(kpa-1))
+!      result=atd(indic)
+!      result=result*100.
+     write(1,*)jj,atd(jj)*100.
+     write(2,*)jj+npx_adpx, atd(jj+npx_adpx)*100.
+     write(3,*)jj+2*npx_adpx, atd(jj+npx_adpx)*100. - atd(jj)*100. 
+  end do
+!   end do 
+  close(1)
+  close(2)
+  close(3)
+
+  info=0
+  return
+
+!END SUBROUTINE CHOLESKY
+END SUBROUTINE cholchol

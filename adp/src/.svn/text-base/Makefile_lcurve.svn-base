@@ -1,0 +1,50 @@
+##########################################################################
+#
+#   makefile for the program LCURVE
+#
+#   Julia Schäfer - 07.06.10
+#
+##########################################################################
+
+
+F77 = ifort
+F90 = ifort
+FLAGS_g95 = -O2 -r4
+FLAGS_ifort = -assume byterecl -i8 -I/home/scjulia/progs/SHTOOLS2.3/SHTOOLS/modules -L/home/scjulia/progs/SHTOOLS2.3/SHTOOLS/lib -lSHTOOLS2.3 -lfftw3 -lm -latlas -O3 
+
+
+
+ODIR = ../objects/
+BDIR = ../bin/
+
+#module:
+#        ifort -c inv_adpx_module.f90 -O2 -assume byterecl -i8
+#        mv inv_adpx_module.o ../objects 
+#        mv inv_adpx_module.mod ../objects
+
+
+
+all:	dirs $(BDIR)/lcurve
+
+clean:
+	rm $(BDIR)/*;
+	rm $(ODIR)/*.o
+
+dirs:
+	if [ ! -s $(BDIR) ];then mkdir $(BDIR); fi
+	if [ ! -s $(ODIR) ];then mkdir $(ODIR); fi
+
+
+$(BDIR)/lcurve: $(ODIR)/lcurve_adpx.o $(ODIR)/inv_adpx_module.o $(ODIR)/param_adpx.o
+	$(F90) $(FLAGS_ifort)  $(ODIR)/inv_adpx_module.o $(ODIR)/param_adpx.o \
+                 $(ODIR)/lcurve_adpx.o -o $(BDIR)/lcurve
+	$(F90) $(FLAGS_ifort) dumbder.f -o $(BDIR)/dumbder
+	$(F90) $(FLAGS_ifort) dumbcurv.f -o $(BDIR)/dumbcurv
+	$(F90) $(FLAGS_ifort) normalize_curvature.f90 -o $(BDIR)/normalize_curvature
+	$(F90) $(FLAGS_ifort) normalize_roughness_3d.f90 -o $(BDIR)/normalize
+
+$(ODIR)/%.o: %.f90  	
+	$(F90) $(FLAGS_ifort) -c $< -o $(ODIR)/$*.o
+
+$(ODIR)/%.o: %.f  
+	$(F77) $(FLAGS_ifort) -c $< -o $(ODIR)/$*.o

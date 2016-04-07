@@ -1,0 +1,166 @@
+PROGRAM inv_adpx_main
+
+  USE inv_adpx_module
+  USE plotprep_adpx_module
+  IMPLICIT NONE
+  real               :: t1,t2,t3,t4,t5,t6
+  CHARACTER(LEN=120) :: check 
+  CHARACTER(LEN=3)   :: project	
+  call CPU_TIME(t1)
+
+
+  !====================================================================!
+  ! file to check progress, information about projecting the matrix
+
+  print*,"file for progress protocol?"
+  read*,check
+
+
+  !====================================================================!
+  ! information for grid definition 
+
+  print*,"what size for fine pixel?"
+  read*,eq_incr
+  print*,"what reference pixel size?"
+  read*,refgrid
+  print*,"compatible with crustal model of same gridsize (0=no,1=yes)?"
+  read*,iswit
+  print*,"assume largest pixel outside Europe? (0=no,1=yes)?"
+  read*,outsideEU
+  print*,"number of layers?"
+  read*,nlayi
+  print*,nlayi
+  
+  fact=refgrid/eq_incr				! relation between reference and finest grid
+  nlev= log(refgrid/eq_incr)/log(2.)+1	! number of different pixel sizes
+  nlatzomax=180/eq_incr            ! maximal number of latitudinal zones in finest grid 
+  allocate(ithres(nlev), nsqrs(nlatzomax,nlev), nsqtot(nlatzomax+1,nlev), n1layer(nlev))
+  
+  print*, "so number of different pixel sizes in the adaptive grid is ", nlev
+  print*,"threshold values for hitcount?"
+  read(*,*)(ithres(lev),lev=1,nlev-1)
+  print*,"minimum value of hits per cell?"
+  read(*,*)ithres(nlev)
+  print*, ithres(1:nlev-1)
+  print*,"hitcount file?"
+  read*,namehits
+  print*,"file to write grid info"
+  read*,namegrid
+  read*,nameadpx
+  read*,namehtcadgrid
+  read*,namenumberadpx
+!======================================================================!
+! infotrmations for plotting
+
+  print*,'model file?'
+  read*,name
+  print*,'adapt colorpalette to each layer? (y/n)'
+  read*, adopt_color
+  print*,'palette file, if one fixed, otherwise colorpakette (haxby,jet, ...)?'
+  read*,colorname
+  print*,'remove average from each layer?'
+  read*,average
+  print*,"top and bottom layers?"
+  read*,rtop,rbot
+  print*, rbot, rtop
+  print*,'mode (1=GMT layers, 2=values layer, 3=values xyz 4=center of cells)'
+  read*,imode
+  print*,'file with layer information'
+  read*,layers  
+  
+  open(82,file=trim(check))
+  
+  
+!======================================================================!
+! check if total number of layers is higher than maximal possible number of layers
+
+  nlay=nlayi+nlayouc
+  if(nlay.gt.nlaym)then
+     print*,'number of layers out of bounds ',nlaym
+     stop
+  endif 
+  print*, "Total number of layers: ",nlay   
+  !======================================================================!
+! compute the mid mantle layers in case of damping
+
+  nlayum =int(xumd_frac*nlay+.5)    ! number of upper mantle layers, xumd_frac is defined in the module
+  nlaylmm=int(xlmd_frac*nlay+.5)    ! number of lower mantle layers
+  nlaymm=nlay-nlaylmm-nlayum        ! number of midmantle layers
+  if(dampmm.gt.0)then
+      print *,'extra damping of ',dampmm
+      print *,'for top ',nlayum,' and bottom ',nlaylmm,' layers'
+  endif
+
+
+!======================================================================!
+! set weights of roughness damping
+!     wgrad(1)=100.
+      wgrad(2)=wgrad(1)
+
+  call CPU_TIME(t2)
+  print*, "time to read informations: ",t2-t1
+  write(82,*)'info read',t2-t1
+
+  
+
+
+
+!======================================================================!
+  call CPU_TIME(t2)
+  print*, "time to read informations: ",t2-t1
+  write(82,*)'info read',t2-t1
+
+
+ !======================================================================!
+ ! define parameterization
+
+  write(82,*)'=========================================================='
+  write(82,*)'start param_adpx'
+  nlatzones=180/eq_incr             ! number of latitudinal zones
+  info=1
+
+  call param_adpx			! subroutine defines parameterization
+
+  IF (info .NE. 0) THEN             ! check for correct working
+     WRITE(*,*)'ERROR in inversion: param_adpx failed.'
+     write(82,*)'ERROR in inversion: param_adpx failed.'
+     GOTO 9999
+ else
+   print*, "Parameterization defined"
+  call CPU_TIME(t3)
+  print*, "time to define parameterization: ",t3-t2
+  write(82,*)'param_adpx done',t3-t2
+  ENDIF
+  call CPU_TIME(t3)
+  
+
+!======================================================================!
+! prepare plotting
+
+  write(82,*)'=========================================================='
+  write(82,*)'start mapview'
+  info=1
+  call mapview_3d_adpx              ! subroutine defines parameterization with adaptive pixel
+  IF (info .NE. 0) THEN             ! check for correct working
+    WRITE(*,*)'ERROR in inversion: mapview failed.'
+    GOTO 9999
+  else
+    write(82,*)'mapview done'
+  ENDIF
+
+
+
+go to 11 
+9999 CONTINUE ! jump here upon error
+  IF (info .NE. 0) WRITE(*,*)'Controlled termination on error.'
+
+11 continue
+
+
+!**********************************************************************!
+!     SUBROUTINES
+!**********************************************************************!
+! contains
+
+
+END PROGRAM inv_adpx_main

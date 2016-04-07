@@ -1,0 +1,114 @@
+##########################################################################
+#
+#   makefile for the program INVERSION
+#
+#   Julia Schäfer - 24.06.09
+#
+##########################################################################
+
+
+F77 = ifort
+F90 = ifort
+FLAGS_g95 = -O2 -r4
+FLAGS_ifort = -assume byterecl -i8 -I/home/scjulia/progs/SHTOOLS2.3/SHTOOLS/modules -L/home/scjulia/progs/SHTOOLS2.3/SHTOOLS/lib -lSHTOOLS2.3 -lfftw3 -lm -latlas -O3 
+
+
+
+ODIR = ../objects/
+BDIR = ../bin/
+
+all:	dirs mod lcurve plot inv
+
+inv:	dirs mod $(BDIR)/inversion
+
+lcurve:	dirs $(BDIR)/lcurve  $(BDIR)/normalize $(BDIR)/normalize_curvature  $(BDIR)/dumbder  $(BDIR)/dumbcurv
+ 
+plot: 	dirs $(BDIR)/plotprep
+
+mod:	dirs $(BDIR)/inv_adpx_module.mod $(BDIR)/plotprep_adpx_module.mod
+
+clean:
+	rm $(BDIR)/*;
+	rm $(ODIR)/*.o
+
+dirs:
+	if [ ! -s $(BDIR) ];then mkdir $(BDIR); fi
+	if [ ! -s $(ODIR) ];then mkdir $(ODIR); fi
+
+
+
+$(BDIR)/inv_adpx_module.mod:
+	ifort -c inv_adpx_module.f90 -O2 -assume byterecl -i8
+	cp inv_adpx_module.o ../objects 
+	cp inv_adpx_module.mod ../objects
+
+$(BDIR)/plotprep_adpx_module.mod:
+	ifort -c plotprep_adpx_module.f90 -O2 -assume byterecl -i8
+	cp plotprep_adpx_module.o ../objects 
+	cp plotprep_adpx_module.mod ../objects
+
+$(BDIR)/inversion: $(ODIR)/inv_adpx_main.o $(ODIR)/inv_adpx_module.o $(ODIR)/param_adpx_angle.o \
+               ../lib/sppsv.o ../lib/spptrf.o ../lib/spptrs.o ../lib/lsame.o ../lib/sdot.o \
+               ../lib/spptrf.o ../lib/spptrs.o ../lib/sscal.o ../lib/sspr.o ../lib/stpsv.o ../lib/xerbla.o ../lib/sscal.o \
+              $(ODIR)/project_matrix.o $(ODIR)/normdampop_ctc.o $(ODIR)/add_matrices.o $(ODIR)/cholesky.o 
+	$(F90) $(FLAGS_ifort)  $(ODIR)/inv_adpx_module.o $(ODIR)/param_adpx_angle.o \
+             ../lib/sppsv.o ../lib/spptrf.o ../lib/spptrs.o ../lib/lsame.o ../lib/sdot.o \
+             ../lib/spptrf.o ../lib/spptrs.o ../lib/sscal.o ../lib/sspr.o ../lib/stpsv.o ../lib/xerbla.o ../lib/sscal.o \
+             $(ODIR)/project_matrix.o $(ODIR)/normdampop_ctc.o  $(ODIR)/add_matrices.o $(ODIR)/cholesky.o \
+             $(ODIR)/inv_adpx_main.o   -o $(BDIR)/inversion 
+
+
+
+$(BDIR)/plotprep: $(ODIR)/plotprep_adpx_main.o $(ODIR)/inv_adpx_module.o $(ODIR)/plotprep_adpx_module.o $(ODIR)/param_adpx.o \
+                  $(ODIR)/mapview_3d_adpx.o
+	$(F90) $(FLAGS_ifort)  $(ODIR)/inv_adpx_module.o $(ODIR)/plotprep_adpx_module.o $(ODIR)/param_adpx.o \
+                  $(ODIR)/plotprep_adpx_main.o  $(ODIR)/mapview_3d_adpx.o -o $(BDIR)/plotprep
+
+$(BDIR)/lcurve: $(ODIR)/lcurve_adpx.o $(ODIR)/inv_adpx_module.o $(ODIR)/param_adpx.o
+	$(F90) $(FLAGS_ifort)  $(ODIR)/inv_adpx_module.o $(ODIR)/param_adpx.o \
+                 $(ODIR)/lcurve_adpx.o -o $(BDIR)/lcurve
+
+$(BDIR)/dumbder: dumbder.f 
+	$(F90) $(FLAGS_ifort) dumbder.f -o $(BDIR)/dumbder
+
+$(BDIR)/dumbcurv: dumbcurv.f
+	$(F90) $(FLAGS_ifort) dumbcurv.f -o $(BDIR)/dumbcurv
+
+$(BDIR)/normalize_curvature: normalize_curvature.f90
+	$(F90) $(FLAGS_ifort) normalize_curvature.f90 -o $(BDIR)/normalize_curvature
+
+$(BDIR)/normalize: normalize_roughness_3d.f90
+	$(F90) $(FLAGS_ifort) normalize_roughness_3d.f90 -o $(BDIR)/normalize
+
+
+
+
+
+
+$(ODIR)/%.o: %.f90  	
+	$(F90) $(FLAGS_ifort) -c $< -o $(ODIR)/$*.o
+
+$(ODIR)/%.o: %.f  
+	$(F77) $(FLAGS_ifort) -c $< -o $(ODIR)/$*.o
+
+
+# $(ODIR)/inv_adpx_main.o: inv_adpx_main.f90
+# 	$(F90) $(FLAGS_ifort)  -c inv_adpx_main.f90 -o $(ODIR)/inv_adpx_main.o
+# 
+# $(ODIR)/inv_adpx_module.o: inv_adpx_module.f90
+# 	$(F90) $(FLAGS_ifort)  -c inv_adpx_module.f90 -o $(ODIR)/inv_adpx_module.o
+# 
+# $(ODIR)/param_adpx.o: param_adpx.f90
+# 	$(F90) $(FLAGS_ifort)  -c param_adpx.f90 -o $(ODIR)/param_adpx.o
+# 
+# $(ODIR)/project_matrix.o: project_matrix.f90
+# 	$(F90) $(FLAGS_ifort)  -c project_matrix.f90 -o $(ODIR)/project_matrix.o
+# 
+# $(ODIR)/add_matrices.o: add_matrices.f90
+# 	$(F90) $(FLAGS_ifort)  -c add_matrices.f90 -o $(ODIR)/add_matrices.o
+# 
+# $(ODIR)/cholesky.o: cholesky.f90
+# 	$(F90) $(FLAGS_ifort)  -c cholesky.f90 -o $(ODIR)/cholesky.o
+
+
+
