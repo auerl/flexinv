@@ -1,6 +1,6 @@
 #Flexinv
 
-Flexinv is a Fortran/Python toolbox to create global, adaptive resolution transversely isotropic tomographic models of the entire mantle, via joint inversion of surface-wave dispersion and body-wave traveltimes, in the high-frequency ray approximation. See _Auer et al. (2014)_ for a complete description.
+Flexinv is a Fortran/Python toolbox to create global, adaptive resolution transversely isotropic tomographic models of the entire mantle, via joint inversion of surface-wave dispersion and body-wave traveltimes, in the high-frequency ray approximation. See _Auer et al. (2014)_ and _Boschi (2009)_ for a complete description of the algorithm.
 
 Some components of the surface wave parts of this code go back to Woodhouse _(1981)_ and _Dziewonski & Anderson (1981)_. The body-wave routines go back to _Gu (2005)_. Crustal corrections are based on CRUST2.0 by _Laske et al. (2002)_. Models are parameterized in curvilinear hexahedrons, whose size is adapted to local ray coverage, following _Schäfer et al. (2011)_.
 
@@ -23,7 +23,7 @@ cd flexinv
 
 ## Running Flexinv
 
-Setting up a new global tomographic imaging problem, requires reasoning about a myriad of parameters, and only a quick overview, leading approximately to our model _savani_ from _(Auer et al. 2014), shall be given here. Everyone who aims addressing a specific problems is strongly encourage to get in touch with me.
+Setting up a new global tomographic imaging problem, requires reasoning about a myriad of parameters, and only a quick overview, leading approximately to _Model A_ from _(Auer et al. 2014), shall be given here. Everyone who aims addressing a specific problems is strongly encourage to get in touch with me.
 
 ### Preliminaries
 
@@ -32,12 +32,18 @@ While the core of flexinv is written in Fortran, we provide a python wrapper for
 ### Chosing datasets
 
 ### Parameter selection
+First we need to chose lateral and vertical parameterization, as well as a set of physical inversion parameters. Flexinv currently supports orthogonal, curvilinear hexahedral basis functions or _voxels_, with adapted azimuthal increments at the poles to approximately maintain a uniform volume over the Earth's sphere. Since, for this test problem we focus on S-waves, we chose to invert for transversely isotropic shear wavespeeds v_{SH} and v_{SV} (Auer et al. 2014)
+
 
 ### Surface-wave matrices
 
 #### Sensitivity kernels
+The forward problem for surface waves, relating frequency dependent phase anomalies with wavespeed perturbations is given by
+
 
 ### Body-wave matrices 
+The forward problem for body waves, relating cross-correlation based or picked traveltime delays with wavespeed perturbations is given by
+
 
 ### Multi-scale meshing
 
