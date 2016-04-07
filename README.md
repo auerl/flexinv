@@ -32,25 +32,35 @@ While the core of flexinv is written in Fortran, we provide a python wrapper for
 ### Chosing datasets
 
 ### Parameter selection
-First we need to chose lateral and vertical parameterization, as well as a set of physical inversion parameters. Flexinv currently supports orthogonal, curvilinear hexahedral basis functions or _voxels_, with adapted azimuthal increments at the poles to approximately maintain a uniform volume over the Earth's sphere. Since, for this test problem we focus on S-waves, we chose to invert for transversely isotropic shear wavespeeds v_{SH} and v_{SV} (Auer et al. 2014)
-
+First we need to chose lateral and vertical parameterization, as well as a set of physical inversion parameters. Flexinv currently supports orthogonal, curvilinear hexahedral basis functions or _voxels_, with adapted azimuthal increments at the poles to approximately maintain a uniform volume over the Earth's sphere. Since, for this test problem we focus on S-waves, we chose to invert for transversely isotropic shear wavespeeds v_{SH} and v_{SV} (Auer et al. 2014), at 28 layers of variable thickness from 0 to 2891 km depth and an equatorial increment of 5.0°.
 
 ### Surface-wave matrices
+The module `mat/suwa` solves forward problem for surface waves, relating frequency dependent phase anomalies with wavespeed perturbations and assembles surface wave submatrices in the CSR (compressed-spares-row) Yale-type binary format. Using the
+
+```bash
+./setup.py --suwa_matrix --sw_data_id sw.fm.ac --eqincr 5.0 --inv_pars '3 4' --layers l28
+```
+
+The argument `--suwa_matrix` tells setup.py to prepare a series of submit scripts for surface wave submatrices, split up by frequency and overtone number. As you see, the desired physical parameters v_{SH} and v_{SV} have been passed through the `--inv_pars '3 4'`. Inverting for v_{PH}, v_{PV}, v_{SH} and v_{SV} would result in `--inv_pars '1 2 3 4'`. The argument after `--layers` specifies the desired vertical parameterization (see `inparam` to clarify which exact parameterization the _l28_ corresponds to), while `--eqincr 5.0` tells setup.py to use a five-degree lateral mesh size.
+
+#### Surface-wave matrices
+...
 
 #### Sensitivity kernels
-The forward problem for surface waves, relating frequency dependent phase anomalies with wavespeed perturbations is given by
-
 
 ### Body-wave matrices 
-The forward problem for body waves, relating cross-correlation based or picked traveltime delays with wavespeed perturbations is given by
+The module `mat/bowa` solves the forward problem for body waves, relating cross-correlation based or picked traveltime delays with wavespeed perturbations, and assembles body-wave submatrices.
 
+```bash
+./setup.py --bowa_matrix --bw_data_id rit --eqincr 5.0 --inv_pars '3 4' --layers l28
+```
 
 ### Multi-scale meshing
 
 ### Inversion
 
 Please note that the legacy Fortran routines sometimes comprise hard-coded 
-
+We strongly recommend to use PETScivn
 
 
 ===================================================================
