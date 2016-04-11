@@ -87,18 +87,6 @@ later on.
 
 The argument `--inversion` tells setup.py to activate the inversion major mode, the `--inv_id` defines how the output folder will be titled, the list of folders after `--inv_dirs` are automatically crawled for pre-computed submatrices. The _S/B_ defines, whether the folder contains body or surface wave matrices, and the real value following the folder path is an additional weighting factor given to the matrices stored in that folder. The `--ddmp_id`,`--rdmp_id` and `--weight_id` define theID's of the anisotropy and roughness damping schemes, respectively (see inparam for details).
 
-
-### Multi-scale meshing
-
-... To be updated ... 
-
-![Adaptive mesh](https://cloud.githubusercontent.com/assets/5452469/14347307/b81e88c4-fcb6-11e5-9b63-959849e71e6c.png =300x) 
-
---project
---proj_dirs
---adaptive
---inv_pars '1 2 3 4'
-
 ## Plotting and analysis
 
 Plotting and analysis of models can be performed using our [pytomo](../pytomo) library.
